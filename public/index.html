@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v13.1 (Smart HUD)</title>
+    <title>Neon Prime: Bastion v13.2 (Online)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -77,7 +77,6 @@
         #mobile-controls { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
         .touch-zone { position: absolute; bottom: 0; width: 50%; height: 60%; pointer-events: auto; }
         #left-zone { left: 0; }
-        /* UPDATED: Added transition for Smart HUD opacity */
         #right-zone { right: 0; display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-end; padding: 20px; gap: 20px; pointer-events: none; transition: opacity 0.2s ease-out; }
         
         .action-btn { width: 80px; height: 80px; border-radius: 50%; border: 2px solid #fff; background: rgba(0,0,0,0.3); backdrop-filter: blur(2px); color: #fff; font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: bold; display: flex; justify-content: center; align-items: center; text-align: center; pointer-events: auto; transition: 0.1s; user-select: none; touch-action: none; }
@@ -157,7 +156,7 @@
     <div id="menu-main" class="overlay">
         <div class="box">
             <h1 class="text-4xl font-bold text-cyan-400 mb-2" style="text-shadow: 0 0 15px cyan">NEON BASTION</h1>
-            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v13.1</p>
+            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v13.2</p>
             <p class="text-yellow-400 text-sm font-bold mb-6 border-b border-gray-700 pb-2">HIGH SCORE: <span id="menu-best">0</span></p>
             <button class="btn" onclick="startGame()">INITIALIZE</button>
             <button id="btn-load-game" class="btn hidden" onclick="loadGame()">LOAD SAVE STATE</button>
@@ -178,17 +177,54 @@
     <div id="menu-ammo" class="overlay hidden">
         <div class="box"><h2 class="text-2xl text-red-400 mb-4">WEAPON SELECTION</h2><p class="text-xs text-gray-400 mb-2">Tap to Select</p><div id="ammo-list" class="card-grid"></div></div>
     </div>
+    
     <div id="menu-over" class="overlay hidden">
         <div class="box">
             <h2 class="text-3xl text-red-500 mb-4">CORE DESTROYED</h2>
             <p class="mb-2">SCORE: <span id="final-score" class="text-white font-bold">0</span></p>
             <p class="mb-4 text-sm text-yellow-400">BEST: <span id="over-best">0</span></p>
             <div id="new-record-msg" class="hidden text-green-400 font-bold mb-4 animate-pulse">NEW RECORD!</div>
+            <div id="leaderboard-display" class="text-xs text-left mt-4 p-2 bg-black border border-gray-700 h-32 overflow-y-auto font-mono text-green-400">
+                Fetching global ranks...
+            </div>
             <button class="btn" onclick="location.reload()">REBOOT</button>
         </div>
     </div>
 
     <script>
+        // --- SERVER COMMUNICATION FUNCTIONS ---
+        async function submitScoreToServer(playerName, score, wave) {
+            try {
+                // Relative path works because frontend is served by backend
+                const response = await fetch('/api/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: playerName, score: score, wave: wave })
+                });
+                const data = await response.json();
+                updateLeaderboardUI(data);
+            } catch (error) {
+                console.error("Network Error:", error);
+                document.getElementById('leaderboard-display').innerText = "CONNECTION OFFLINE - SCORE SAVED LOCALLY";
+            }
+        }
+
+        function updateLeaderboardUI(scores) {
+            const list = document.getElementById('leaderboard-display');
+            if(!scores || scores.length === 0) {
+                list.innerHTML = "NO DATA";
+                return;
+            }
+            let html = "<table style='width:100%'>";
+            scores.forEach((s, i) => {
+                const color = i === 0 ? '#ffeb3b' : (i < 3 ? '#00e5ff' : '#fff');
+                html += `<tr style='color:${color}'><td>#${i+1} ${s.name}</td><td style='text-align:right'>${s.score}</td></tr>`;
+            });
+            html += "</table>";
+            list.innerHTML = html;
+        }
+        // --------------------------------------
+
         let canvas, ctx, bgCanvas, bgCtx;
         let dpr = Math.min(window.devicePixelRatio || 1, 2); 
         let gameScale = 1;
@@ -649,627 +685,35 @@
             }
             return array;
         }
-
-        window.startGame = function() {
-            initAudio(); document.getElementById('menu-main').classList.add('hidden'); document.getElementById('boss-hud').style.display = 'none';
-            resetPlayer(); score = 0; wave = 1; enemies = []; bullets = []; powerups = []; floatingTexts = []; shootingStars = [];
-            particlePool.forEach(p => p.active = false); bossActive = false; APPLIED_PERKS = {}; isInputLocked = false; state = 'PLAY'; createAiMessage("INITIATING DEFENSE PROTOCOL.");
-            bossDropCooldown = 0; currentBossDropChance = 0.05; repulsorCooldown = 0; repulsorAnim = 0; lastSpawnType = '-';
-        };
         
-        function updateDebug() {
-            if (!debugMode) return;
-            const now = performance.now(); const delta = now - lastFrameTime; lastFrameTime = now; fps = Math.round(1000 / delta);
-            document.getElementById('debug-fps').innerText = `FPS: ${fps}`; document.getElementById('debug-state').innerText = `STATE: ${state} (Locked: ${isInputLocked})`; 
-            let pCount = 0; for(let i=0; i<MAX_PARTICLES; i++) if(particlePool[i].active) pCount++;
-            document.getElementById('debug-entities').innerText = `ENTITIES: E:${enemies.length} B:${bullets.length} P:${pCount}`;
-            document.getElementById('debug-last-spawn').innerText = `LAST: ${lastSpawnType.toUpperCase()}`;
-            document.getElementById('debug-hp').innerText = `HP: ${Math.floor(player.hp)} / ${player.maxHp}`; document.getElementById('debug-wave').innerText = `WAVE: ${wave}`; document.getElementById('debug-ammo').innerText = `AMMO: ${AMMO[player.ammo].name}`;
-        }
-
-        function loop() {
-            requestAnimationFrame(loop); updateDebug(); if(state === 'OVER') return;
-            if(state === 'PLAY' || state === 'MENU') { stars.forEach(s => { s.y += s.z * 0.5; if(s.y > window.innerHeight) { s.y = 0; s.x = Math.random()*window.innerWidth; } }); if (state === 'PLAY') { if (Math.random() < 0.01) { shootingStars.push({ x: Math.random() * window.innerWidth, y: -50, vx: (Math.random() - 0.5) * 20, vy: 15 + Math.random() * 10, life: 40 }); } shootingStars.forEach((s, i) => { s.x += s.vx; s.y += s.vy; s.life--; if(s.life <= 0) shootingStars.splice(i, 1); }); } else { shootingStars = []; } }
-            if(state === 'PAUSED' || state === 'MENU') { if(frame % 30 === 0 || state === 'MENU') draw(); if(state === 'MENU') { player.angle += 0.01; } return; }
-            update(); draw(); 
-        }
-
-        function update() {
-            frame++;
-            const W = window.innerWidth; const H = window.innerHeight;
-            if (zoomScale < zoomTarget) { zoomScale = Math.min(zoomTarget, zoomScale + zoomSpeed); } else if (zoomScale > zoomTarget) { zoomScale = Math.max(zoomTarget, zoomScale - zoomSpeed); }
-            if (pauseCooldown > 0) pauseCooldown--; 
-            
-            if (bossDropCooldown > 0) bossDropCooldown--;
-            if (repulsorCooldown > 0) {
-                 repulsorCooldown--;
-                 if (repulsorCooldown === 0) {
-                     document.getElementById('ability-txt').classList.add('ready');
-                     createFloatingText(player.x, player.y - 60, "REPULSOR READY", "#ffeb3b");
-                 } else {
-                     document.getElementById('ability-txt').classList.remove('ready');
-                 }
-            }
-            if (repulsorAnim > 0) repulsorAnim--;
-            
-            // Overdrive Logic
-            if (player.isOverdrive) {
-                player.overdrive -= 0.35; // Drains over ~5 seconds
-                if (player.overdrive <= 0) {
-                    player.isOverdrive = false;
-                    player.overdrive = 0;
-                    createFloatingText(player.x, player.y - 100, "SYSTEMS NORMAL", "#fff");
-                }
-            }
-
-            // COMBO LOGIC
-            if (player.comboTimer > 0) {
-                player.comboTimer--;
-                if (player.comboTimer <= 0) {
-                    player.combo = 0;
-                    lastDomCombo = -1;
-                    createFloatingText(player.x, player.y - 80, "COMBO LOST", "#888");
-                }
-            }
-
-            if (!joystick.active) {
-               player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-            }
-            player.hue = (player.hue + 1) % 360;
-            player.x = W / 2; 
-            player.y = H / 2;
-            
-            // --- SMART HUD LOGIC ---
-            const rightZone = document.getElementById('right-zone');
-            if (rightZone) {
-                let enemyInCorner = false;
-                // Check bottom-right 20% of screen
-                for(let i=0; i<enemies.length; i++) {
-                    if(enemies[i].x > W * 0.7 && enemies[i].y > H * 0.7) {
-                        enemyInCorner = true;
-                        break;
-                    }
-                }
-                // Fade if enemies are under buttons
-                rightZone.style.opacity = enemyInCorner ? "0.15" : "1.0";
-            }
-            // -----------------------
-            
-            if(player.cooldown > 0) player.cooldown--;
-            if(mouse.down && !isInputLocked) fire(); else lasers = [];
-            if(player.regen > 0 && frame % 60 === 0 && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + player.regen);
-            if (player.hp < player.maxHp * 0.3 && aiTimer === 0) { createAiMessage("HULL INTEGRITY CRITICAL. EVADE.", 120); document.getElementById('ai-text').style.color = '#ff9800'; } else if (player.hp > player.maxHp * 0.3 && document.getElementById('ai-text').style.color === 'rgb(255, 152, 0)') { document.getElementById('ai-text').style.color = 'lime'; }
-            if(aiTimer > 0) aiTimer--; if(player.invuln > 0) player.invuln--; 
-            
-            for (let i=powerups.length-1; i>=0; i--) {
-                let p = powerups[i];
-                if (p.life === undefined) p.life = 900; p.life--;
-                if (p.life <= 0) { powerups.splice(i, 1); continue; }
-                
-                const dx = player.x - p.x; const dy = player.y - p.y; const dist = Math.hypot(dx, dy);
-                let range = player.pickupRange * gameScale;
-                if (bossActive) range *= 2; 
-                range *= 1.5; 
-                if (dist < range) { const pullSpeed = (1 - (dist / range)) * 0.15 + 0.05; p.x += dx * pullSpeed; p.y += dy * pullSpeed; }
-                if(dist < 40 * gameScale) {
-                    const buff = POWERUPS[p.type];
-                    if (buff.dur > 0) { if (!player.activeBuffs[p.type]) { if (buff.apply) buff.apply(player); } player.activeBuffs[p.type] = buff.dur * player.durationMult; createFloatingText(player.x, player.y - 40 * gameScale, p.type.toUpperCase(), buff.color); } 
-                    else { buff.apply(player); createFloatingText(player.x, player.y - 40 * gameScale, buff.name, buff.color); }
-                    sfx('equip'); powerups.splice(i,1);
-                }
-            }
-            
-            for (let key in player.activeBuffs) { if (player.activeBuffs[key] > 0) { player.activeBuffs[key]--; } else { if (POWERUPS[key].remove) POWERUPS[key].remove(player); createFloatingText(player.x, player.y - 60, key.toUpperCase() + " END", "#888"); delete player.activeBuffs[key]; } }
-            if(!bossActive && frame % (90 - Math.min(50, wave)) === 0) spawnEnemy();
-            if(!bossActive && frame % 1200 === 0) { wave++; createAiMessage(`WAVE ${wave} INCOMING. PREPARE FOR ESCALATION.`); if (wave % 5 === 0) spawnBoss(); }
-
-            const type = AMMO[player.ammo];
-            
-            for(let i=bullets.length-1; i>=0; i--) {
-                let b = bullets[i]; 
-                // VISUAL: Bullet Trails
-                if (frame % 2 === 0) { spawnTrail(b.x, b.y, b.c, 2); }
-
-                if (b.type === 'homing') {
-                    let nearest = null, minDistSq = Infinity;
-                    for(let k=0; k<enemies.length; k++){ const e = enemies[k]; const dSq = (e.x-b.x)**2 + (e.y-b.y)**2; if(!e.isProjectile && dSq < minDistSq) { minDistSq = dSq; nearest = e; } }
-                    if(nearest && minDistSq < 250000) { 
-                        const desiredAngle = Math.atan2(nearest.y - b.y, nearest.x - b.x); const currentAngle = Math.atan2(b.vy, b.vx);
-                        let diff = desiredAngle - currentAngle; while(diff > Math.PI) diff -= Math.PI*2; while(diff < -Math.PI) diff += Math.PI*2;
-                        b.vx = Math.cos(currentAngle + Math.sign(diff)*0.05) * Math.hypot(b.vx, b.vy); b.vy = Math.sin(currentAngle + Math.sign(diff)*0.05) * Math.hypot(b.vx, b.vy);
-                    }
-                }
-                b.x += b.vx * gameScale; b.y += b.vy * gameScale;
-                if (b.type === 'volt') { b.x += (Math.random() - 0.5) * 4 * gameScale; b.y += (Math.random() - 0.5) * 4 * gameScale; }
-                if(b.type === 'singularity') { enemies.forEach(e => { const dx = b.x - e.x; const dy = b.y - e.y; if((dx*dx + dy*dy) < (10000 * gameScale * gameScale)) { e.x += dx*0.02; e.y += dy*0.02; e.hp -= 0.2; } }); if(--b.life <= 0) bullets.splice(i,1); continue; }
-                if(b.x<0||b.x>W||b.y<0||b.y>H) { bullets.splice(i,1); continue; }
-
-                for(let j=enemies.length-1; j>=0; j--) {
-                    let e = enemies[j];
-                    const distSq = (b.x-e.x)**2 + (b.y-e.y)**2;
-                    const speed = Math.hypot(b.vx, b.vy); const hitDist = (e.r + 5 + (speed * 0.5)) * gameScale;
-                    if(distSq < hitDist**2) {
-                        if (e.type === 'stalker' && e.isPhased) continue;
-
-                        let finalDmg = b.dmg; if(Math.random() < player.critChance) { finalDmg *= 2; createFloatingText(e.x, e.y - 20, "CRIT!", "#ff0"); }
-                        e.hp -= finalDmg; e.hitTimer = 5; 
-                        sfx('hit', e.x); 
-                        const kForce = 4 / e.mass; const kAng = Math.atan2(e.y - b.y, e.x - b.x); e.x += Math.cos(kAng) * kForce * gameScale; e.y += Math.sin(kAng) * kForce * gameScale; 
-                        
-                        if (e.subtype === 'boss_star') { e.x += Math.cos(kAng) * 1 * gameScale; e.y += Math.sin(kAng) * 1 * gameScale; }
-
-                        if(b.type === 'explosive') { enemies.forEach(sub => { if((sub.x-b.x)**2 + (sub.y-b.y)**2 < (type.radius * gameScale)**2) { sub.hp -= b.dmg; sub.burnTimer = 60; } }); makePart(b.x, b.y, type.color, 5, 3); } 
-                        else if(b.type === 'singularity') { b.vx = 0; b.vy = 0; b.life = 180; b.impactTimer = 15; if(e.hp < e.maxHp * 0.45 && !e.isBoss) { e.hp -= b.dmg * 5; createFloatingText(e.x, e.y, "CRUSH", "#84f"); } break; } 
-                        else { makePart(b.x, b.y, type.color, 2, 2); }
-                        if(b.pierce > 0) b.pierce--; else { bullets.splice(i,1); break; }
-                    }
-                }
-            }
-
-            for(let i=enemies.length-1; i>=0; i--) {
-                let e = enemies[i];
-                if(e.burnTimer > 0) { e.hp -= 0.1; e.burnTimer--; }
-                if(e.poisonTimer > 0) { e.hp -= 0.1; e.poisonTimer--; }
-                
-                if (e.isProjectile && frame % 3 === 0) { spawnTrail(e.x, e.y, e.c, 2); }
-                
-                if (e.type === 'stalker') {
-                    e.phaseTimer--;
-                    if (e.phaseTimer <= 0) {
-                        e.isPhased = !e.isPhased;
-                        e.phaseTimer = e.isPhased ? 90 : 150; 
-                        makePart(e.x, e.y, e.c, 5, 1);
-                    }
-                    e.c = e.isPhased ? 'rgba(176, 190, 197, 0.2)' : '#b0bec5';
-                }
-
-                if (e.type === 'railgunner') {
-                    const dist = Math.hypot(player.x - e.x, player.y - e.y);
-                    if (dist < 400 * gameScale && !e.isAiming) {
-                        e.isAiming = true; e.aimTimer = 120; e.vx = 0; e.vy = 0;
-                    }
-                    if (e.isAiming) {
-                        e.aimTimer--;
-                        if (e.aimTimer <= 0) {
-                            const ang = Math.atan2(player.y - e.y, player.x - e.x);
-                            enemies.push({ type: 'tank', isProjectile: true, x: e.x, y: e.y, vx: Math.cos(ang)*15, vy: Math.sin(ang)*15, hp: 1, maxHp: 1, r: 4, s: 15, c: '#f00', mass: 2, sides: 4 });
-                            sfx('shoot'); e.isAiming = false; e.aimTimer = 180;
-                        }
-                    } else if (dist >= 400 * gameScale) {
-                        let ang = Math.atan2(player.y - e.y, player.x - e.x);
-                        e.x += Math.cos(ang) * e.s * gameScale; e.y += Math.sin(ang) * e.s * gameScale;
-                    }
-                }
-
-                if (e.type === 'siphon') {
-                    const dist = Math.hypot(player.x - e.x, player.y - e.y);
-                    const orbitRange = 250 * gameScale;
-                    if (dist > orbitRange) {
-                        let ang = Math.atan2(player.y - e.y, player.x - e.x);
-                        e.x += Math.cos(ang) * e.s * gameScale; e.y += Math.sin(ang) * e.s * gameScale;
-                    } else {
-                        e.angleOffset += 0.01;
-                        e.x = player.x + Math.cos(e.angleOffset) * orbitRange;
-                        e.y = player.y + Math.sin(e.angleOffset) * orbitRange;
-                        if (frame % 30 === 0 && player.xp > 0) {
-                            player.xp = Math.max(0, player.xp - 5);
-                            createFloatingText(player.x, player.y - 50, "-XP", "#6200ea");
-                        }
-                    }
-                }
-                
-                if (e.type === 'weaver') {
-                    enemies.forEach(ally => {
-                        if (ally !== e && !ally.isBoss && ally.hp > 0) {
-                            const d2 = (e.x - ally.x)**2 + (e.y - ally.y)**2;
-                            if (d2 < 25000 * gameScale * gameScale) { 
-                                ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(ally.x, ally.y); ctx.stroke();
-                                if (Math.random() < 0.1) ally.hp += 0.05; 
-                            }
-                        }
-                    });
-                }
-                
-                if (e.type === 'lancer') {
-                    const distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
-                    if (distToPlayer < 400 * gameScale) {
-                        e.vx *= 0.9; e.vy *= 0.9; 
-                        e.chargeTimer = (e.chargeTimer || 0) + 1;
-                        if (e.chargeTimer > 60 && e.chargeTimer % 120 === 0) {
-                            const ang = Math.atan2(player.y - e.y, player.x - e.x);
-                            enemies.push({ type: 'swarmer', isProjectile: true, x: e.x, y: e.y, vx: Math.cos(ang)*6, vy: Math.sin(ang)*6, hp: 1, maxHp: 1, r: 6, s: 6, c: '#ff0', mass: 0.1, sides: 3 });
-                        }
-                        ctx.strokeStyle = `rgba(255, 255, 0, ${Math.min(1, e.chargeTimer/120)})`; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(player.x, player.y); ctx.stroke();
-                    }
-                }
-                
-                if (e.type === 'mortar') {
-                    const distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
-                    if (distToPlayer < e.range * gameScale) {
-                        e.fireTimer = (e.fireTimer || 120) - 1;
-                        if (e.fireTimer <= 0) {
-                             e.fireTimer = 180;
-                             const ang = Math.atan2(player.y - e.y, player.x - e.x);
-                             enemies.push({ type: 'tank', isProjectile: true, x: e.x, y: e.y, vx: Math.cos(ang)*3, vy: Math.sin(ang)*3, hp: 3, maxHp: 3, r: 8, s: 3, c: '#f60', mass: 0.5, sides: 4, isMortarShell: true });
-                        }
-                    } else {
-                         let ang = Math.atan2(player.y - e.y, player.x - e.x);
-                         e.x += Math.cos(ang) * e.s * gameScale; e.y += Math.sin(ang) * e.s * gameScale;
-                    }
-                }
-                
-                if (e.type === 'blinker') {
-                    e.blinkTimer = (e.blinkTimer || 180) - 1;
-                    if (e.blinkTimer <= 0) {
-                        e.blinkTimer = 180 + Math.random()*60;
-                        const ang = Math.atan2(player.y - e.y, player.x - e.x);
-                        makePart(e.x, e.y, e.c, 10, 2);
-                        e.x += Math.cos(ang) * 100 * gameScale; e.y += Math.sin(ang) * 100 * gameScale;
-                        makePart(e.x, e.y, e.c, 10, 2);
-                        sfx('hit', e.x);
-                    }
-                    let ang = Math.atan2(player.y - e.y, player.x - e.x);
-                    e.x += Math.cos(ang) * e.s * gameScale; e.y += Math.sin(ang) * e.s * gameScale;
-                }
-
-                if (e.isBoss) {
-                    const dist = Math.hypot(player.x - e.x, player.y - e.y);
-                    
-                    if (e.y < 150 * gameScale) { 
-                        e.y += 4 * gameScale; 
-                    } else {
-                        let ang = Math.atan2(player.y - e.y, player.x - e.x);
-                        let approachSpeed = e.s;
-                        if (dist < 300 * gameScale) approachSpeed = -e.s * 1.2;
-                        else if (dist < 500 * gameScale) approachSpeed = 0;
-                        else approachSpeed = e.s * 1.2;
-                        
-                        e.x += Math.cos(ang) * approachSpeed * gameScale; e.y += Math.sin(ang) * approachSpeed * gameScale;
-                        const strafeAng = ang + Math.PI/2; 
-                        const strafeDist = Math.sin(frame * 0.025) * 4 * gameScale; 
-                        e.x += Math.cos(strafeAng) * strafeDist; e.y += Math.sin(strafeAng) * strafeDist;
-                        
-                        e.x = Math.max(e.r, Math.min(window.innerWidth - e.r, e.x));
-                        e.y = Math.max(e.r, Math.min(window.innerHeight - e.r, e.y));
-                    }
-                    
-                    e.rotation += e.spinSpeed;
-                    if (e.hp < e.maxHp * 0.5) { e.c = '#f00'; e.spinSpeed *= 1.01; } 
-                    e.fireModeTimer--;
-                    if (e.fireModeTimer <= 0) { e.fireMode = (e.fireMode + 1) % 2; e.fireModeTimer = (ENEMY_TYPES[e.subtype].fireModeTimer || 600); if (e.fireMode === 1) { createAiMessage(`BOSS: ${e.name} ACTIVATING HIGH-RATE SYSTEMS.`, 180); } else { createAiMessage(`BOSS: ${e.name} RESUMING STANDARD PATTERN.`, 120); } }
-                    let fireRate = e.fireMode === 0 ? 45 : 30; 
-                    if (e.subtype === 'boss_octa') fireRate = e.fireMode === 0 ? 60 : 45; 
-                    if (e.subtype === 'boss_tri') fireRate = e.fireMode === 0 ? 20 : 10;
-                    if (e.hp < e.maxHp * 0.5) fireRate /= 2;
-                    
-                    if (frame % Math.floor(fireRate) === 0 && enemies.length < 15) {
-                        if (e.fireMode === 0) {
-                            const count = e.hp < e.maxHp * 0.5 ? (e.sides*2) : e.sides;
-                            for(let k=0; k<count; k++) {
-                                const bAngle = e.rotation + (k * (Math.PI*2/count));
-                                let pType = e.subtype === 'boss_octa' ? 'tank' : 'swarmer'; let pColor = e.subtype === 'boss_octa' ? '#00b0ff' : '#f0f';
-                                const minionHp = 2 + Math.floor(wave/5);
-                                enemies.push({ type: pType, x: e.x, y: e.y, hp: minionHp, maxHp: minionHp, r: 5, s: 4, c: pColor, mass: 0.1, sides: 3, rotation: 0, spinSpeed: 0.2, isProjectile: true, vx: Math.cos(bAngle)*4, vy: Math.sin(bAngle)*4 });
-                            }
-                        } else {
-                            let targetAngle = Math.atan2(player.y - e.y, player.x - e.x);
-                            const minionHp = 2 + Math.floor(wave/5);
-                            if (e.subtype === 'boss_tri') { for(let k=0; k<3; k++){ const spread = (k - 1) * 0.2; const bAngle = targetAngle + spread; enemies.push({ type: 'swarmer', x: e.x, y: e.y, hp: minionHp, maxHp: minionHp, r: 8, s: 6, c: '#fff', mass: 0.1, sides: 3, rotation: 0, spinSpeed: 0.2, isProjectile: true, vx: Math.cos(bAngle)*6, vy: Math.sin(bAngle)*6, isHoming: true }); } } 
-                            else { const streamCount = 5; for(let k=0; k<streamCount; k++) { const offset = (k - (streamCount - 1) / 2) * 0.05; const bAngle = targetAngle + offset; enemies.push({ type: 'swarmer', x: e.x, y: e.y, hp: minionHp, maxHp: minionHp, r: 5, s: 6, c: e.c, mass: 0.1, sides: 3, rotation: 0, spinSpeed: 0.2, isProjectile: true, vx: Math.cos(bAngle)*6, vy: Math.sin(bAngle)*6 }); } }
-                        }
-                    }
-                    
-                    const bossHpPct = e.hp / e.maxHp * 100;
-                    if (Math.abs(bossHpPct - lastDomBossHp) > 1) { 
-                        document.getElementById('boss-hp').style.width = bossHpPct + '%';
-                        lastDomBossHp = bossHpPct;
-                    }
-                } 
-                else if (e.isProjectile) {
-                    e.x += e.vx * gameScale; e.y += e.vy * gameScale; e.rotation += 0.2;
-                    if(e.x<0||e.x>W||e.y<0||e.y>H) enemies.splice(i,1);
-                    if (e.isHoming) { const desiredAngle = Math.atan2(player.y - e.y, player.x - e.x); const currentAngle = Math.atan2(e.vy, e.vx); let diff = desiredAngle - currentAngle; while(diff > Math.PI) diff -= Math.PI*2; while(diff < -Math.PI) diff += Math.PI*2; e.vx = Math.cos(currentAngle + Math.sign(diff)*0.03) * Math.hypot(e.vx, e.vy); e.vy = Math.sin(currentAngle + Math.sign(diff)*0.03) * Math.hypot(e.vx, e.vy); }
-                }
-                else if (e.type !== 'lancer' && e.type !== 'weaver' && e.type !== 'mortar' && e.type !== 'blinker' && e.type !== 'railgunner' && e.type !== 'siphon') {
-                    let ang = Math.atan2(player.y - e.y, player.x - e.x);
-                    if (e.type === 'spinner') ang += Math.sin(frame * 0.05) * 0.5;
-                    e.x += Math.cos(ang) * e.s * gameScale; e.y += Math.sin(ang) * e.s * gameScale; 
-                    e.rotation += e.spinSpeed;
-                }
-                
-                if(player.drones > 0) {
-                    const droneDist = 50 * gameScale;
-                    for(let k=0; k<player.drones; k++) {
-                        const dAngle = (frame * 0.05) + (k * (Math.PI*2/player.drones)); const dx = player.x + Math.cos(dAngle) * droneDist; const dy = player.y + Math.sin(dAngle) * droneDist;
-                        if((dx-e.x)**2 + (dy-e.y)**2 < ((e.r + 5) * gameScale)**2) { e.hp -= 10; makePart(e.x, e.y, '#0ff', 2, 2); const kAng = Math.atan2(e.y - dy, e.x - dx); e.x += Math.cos(kAng)*10*gameScale; e.y += Math.sin(kAng)*10*gameScale; }
-                    }
-                }
-
-                const pRadius = player.radius * 0.7 * gameScale;
-                const distSq = (player.x-e.x)**2 + (player.y-e.y)**2;
-                
-                const repelRadius = player.radius * 2 * gameScale;
-                if (distSq < repelRadius**2 && !e.isProjectile && !e.isBoss) {
-                     const ang = Math.atan2(e.y - player.y, e.x - player.x);
-                     e.x += Math.cos(ang) * 0.5 * gameScale; e.y += Math.sin(ang) * 0.5 * gameScale;
-                }
-
-                if(distSq < (pRadius + e.r * gameScale)**2) {
-                    if (player.invuln > 0) { const angle = Math.atan2(e.y - player.y, e.x - player.x); const pushDist = 3 * gameScale; e.x += Math.cos(angle) * pushDist; e.y += Math.sin(angle) * pushDist; } 
-                    else if(!player.hasShield) { player.hp -= 10 * player.damageReduction; player.invuln = 60; addShake(15); sfx('hit', player.x); makePart(player.x, player.y, '#f00', 10, 3); createFloatingText(player.x, player.y, "-10", "#f00"); if(player.hp <= 0) gameOver(); } 
-                    else { player.hasShield = false; delete player.activeBuffs['shield']; player.invuln = 60; createFloatingText(player.x, player.y, "SHIELD BREAK", "#0ff"); sfx('hit', player.x); const kAng = Math.atan2(e.y - player.y, e.x - player.x); e.x += Math.cos(kAng)*80*gameScale; e.y += Math.sin(kAng)*80*gameScale; }
-                    if (e.isProjectile && player.invuln <= 0) enemies.splice(i,1);
-                }
-
-                if(e.hitTimer > 0) e.hitTimer--;
-
-                if(e.hp <= 0) {
-                    if (e.type === 'fracture') {
-                        for(let k=0; k<3; k++) {
-                            const ang = (Math.PI*2/3)*k + Math.random();
-                            enemies.push({ type: 'swarmer', x: e.x, y: e.y, hp: 2, maxHp: 2, r: 10, s: 2.5, c: '#f44', mass: 0.3, sides: 3, rotation: ang, spinSpeed: 0.2, hitTimer: 0, vx: Math.cos(ang)*3, vy: Math.sin(ang)*3, isProjectile: false }); 
-                        }
-                    }
-
-                    let baseVal = 10 + (wave * 2); 
-                    
-                    if (e.isProjectile && bossActive) baseVal = 0;
-                    if (!e.isBoss) {
-                        player.xp += baseVal * player.xpMult * (e.mass || 1);
-                        // Overdrive Gain
-                        if (!player.isOverdrive) player.overdrive = Math.min(player.maxOverdrive, player.overdrive + (1.5 * (e.mass || 1)));
-                    }
-                    
-                    if (!e.isProjectile && !e.isBoss) {
-                        player.combo++;
-                        player.comboTimer = 150; 
-                        const mult = 1 + Math.floor(player.combo / 10);
-                        score += 10 * (e.mass || 1) * mult;
-                        if (player.combo % 10 === 0) {
-                            createFloatingText(player.x, player.y - 90, `x${mult} MULTIPLIER!`, "#ffeb3b");
-                            createFloatingText(e.x, e.y, "RAMPAGE", "#f00");
-                        }
-                    } else {
-                        score += 10 * (e.mass || 1); 
-                    }
-                    
-                    sfx('die', e.x); makePart(e.x, e.y, e.c, 8, 4);
-                    if (e.isBoss) { 
-                        bossActive = false; document.getElementById('boss-hud').style.display = 'none'; 
-                        spawnPowerup(e.x, e.y); createFloatingText(e.x, e.y, "BOSS DEFEATED", "#f0f"); 
-                        player.xp += player.nextXp;
-                        player.overdrive = player.maxOverdrive;
-                    }
-                    
-                    else if (e.isProjectile && bossActive) { 
-                         if (bossDropCooldown <= 0) {
-                             if (Math.random() < currentBossDropChance) {
-                                 spawnPowerup(e.x, e.y, true);
-                                 bossDropCooldown = 900; 
-                                 currentBossDropChance = 0.05; 
-                             } else {
-                                 currentBossDropChance += 0.01; 
-                             }
-                         }
-                    }
-                    else if(Math.random() < 0.08) { spawnPowerup(e.x, e.y); }
-                    enemies.splice(i,1);
-                }
-            }
-
-            if(lasers.length > 0 && frame % 5 === 0) {
-                enemies.forEach(e => {
-                    lasers.forEach(l => {
-                        const dx = e.x - player.x; const dy = e.y - player.y; const dist = Math.hypot(dx, dy);
-                        let angleDiff = Math.atan2(dy, dx) - l.a; while (angleDiff > Math.PI) angleDiff -= Math.PI * 2; while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-                        const perpDist = Math.abs(Math.sin(angleDiff) * dist);
-                        if(dist < 800 * gameScale && perpDist < (e.r + 10) * gameScale) { e.hp -= 2 * player.dmgMult; e.hitTimer = 5; makePart(e.x, e.y, l.c, 1, 2); }
-                    });
-                });
-            }
-
-            for(let i=0; i<MAX_PARTICLES; i++) {
-                let p = particlePool[i]; if(!p.active) continue;
-                p.x += p.vx * gameScale; p.y += p.vy * gameScale; p.l--; if(p.l<=0) p.active = false;
-            }
-            
-            for(let i=floatingTexts.length-1; i>=0; i--) { let t = floatingTexts[i]; t.y -= 1 * gameScale; t.life--; if(t.life <= 0) floatingTexts.splice(i,1); }
-
-            const displayScore = Math.floor(score); if(displayScore !== lastDomScore) { document.getElementById('score').innerText = displayScore; lastDomScore = displayScore; }
-            
-            if (player.combo > 1) {
-                const comboEl = document.getElementById('combo-text');
-                const comboBarFrame = document.getElementById('combo-bar-frame');
-                comboEl.style.display = 'block';
-                comboBarFrame.style.display = 'block';
-                
-                if (player.combo !== lastDomCombo) {
-                    const mult = 1 + Math.floor(player.combo / 10);
-                    comboEl.innerText = `x${mult} (${player.combo})`;
-                    if (mult >= 4) comboEl.style.color = '#f00';
-                    else if (mult >= 3) comboEl.style.color = '#ff9800';
-                    else if (mult >= 2) comboEl.style.color = '#ffeb3b';
-                    else comboEl.style.color = '#fff';
-                    lastDomCombo = player.combo;
-                }
-                document.getElementById('combo-bar-fill').style.width = (player.comboTimer / 150 * 100) + '%';
-            } else {
-                document.getElementById('combo-text').style.display = 'none';
-                document.getElementById('combo-bar-frame').style.display = 'none';
-            }
-
-            // Overdrive UI Update
-            const odPct = Math.min(100, player.overdrive / player.maxOverdrive * 100);
-            if (Math.abs(odPct - lastDomOd) > 1) {
-                document.getElementById('od-bar-frame').style.display = 'block';
-                document.getElementById('od-bar').style.width = odPct + '%';
-                lastDomOd = odPct;
-                
-                if (odPct >= 100 && !player.isOverdrive) {
-                    document.getElementById('overdrive-txt').classList.add('ready');
-                } else {
-                    document.getElementById('overdrive-txt').classList.remove('ready');
-                }
-            }
-
-            if(wave !== lastDomWave) { document.getElementById('wave').innerText = wave; lastDomWave = wave; }
-            const hpPct = Math.max(0, player.hp/player.maxHp*100); if(Math.abs(hpPct - lastDomHp) > 0.1) { document.getElementById('hp-bar').style.width = hpPct + '%'; lastDomHp = hpPct; }
-            const xpPct = Math.min(100, player.xp/player.nextXp*100); if(Math.abs(xpPct - lastDomXp) > 0.1) { document.getElementById('xp-bar').style.width = xpPct + '%'; lastDomXp = xpPct; }
-            
-            while(player.xp >= player.nextXp) {
-                if(levelUp()) break; 
-            }
-        }
-        
-        function spawnPowerup(x, y, isBossDrop = false) {
-            let pool = POWERUP_KEYS;
-            if (isBossDrop && Math.random() < 0.5) { pool = ['rapid', 'multi']; }
-            const t = pool[Math.floor(Math.random() * pool.length)];
-            powerups.push({ x: x, y: y, type: t, c: POWERUPS[t].color, life: 900 });
-        }
-
-        function spawnBoss() {
-            bossDropCooldown = 0;
-            currentBossDropChance = 0.05;
-            lastDomBossHp = -1;
-
-            bossActive = true; enemies = []; 
-            const bossKeys = ['boss_hex', 'boss_octa', 'boss_tri', 'boss_star'];
-            const key = bossKeys[Math.floor(Math.random() * bossKeys.length)];
-            const stats = ENEMY_TYPES[key];
-            createFloatingText(player.x, player.y-100 * gameScale, "WARNING: " + stats.name, stats.color); sfx('boss_spawn'); 
-            document.getElementById('boss-hud').style.display = 'flex';
-            document.getElementById('boss-name').innerText = stats.name; document.getElementById('boss-name').style.color = stats.color;
-            document.querySelector('.boss-bar-fill').style.backgroundColor = stats.color; document.querySelector('.boss-bar-fill').style.boxShadow = `0 0 10px ${stats.color}`;
-            
-            // BALANCE PATCH v11.2: Reduced HP scaling drastically for fair fights
-            let bossHp = ((500 + (wave * 100)) * (stats.hpMult / 50)) * 0.6;
-            
-            enemies.push({ isBoss: true, subtype: key, x: window.innerWidth/2, y: 150 * gameScale, hp: bossHp, maxHp: bossHp, r: stats.radius, s: stats.speed, c: stats.color, mass: stats.mass, sides: stats.sides, rotation: 0, spinSpeed: stats.spin, hitTimer: 0, shape: stats.shape, fireDelay: 30, fireMode: 0, fireModeTimer: stats.fireModeTimer });
-        }
-
-        function fire() {
-            const type = AMMO[player.ammo];
-            if(player.ammo === 'laser') { lasers = []; for(let i=0; i<player.barrel; i++) { const spread = (i - (player.barrel-1)/2) * 0.1; lasers.push({ a: player.angle + spread, c: type.color }); } return; }
-            if(player.cooldown > 0) return;
-            const spd = type.speed * player.spdMult; 
-            let rate = (player.activeBuffs['rapid'] > 0 || player.isOverdrive) ? 4 : player.fireRate;
-            
-            if (player.isOverdrive) rate = 2; 
-
-            // --- NEW SHAKE LOGIC FOR RAPID FIRE ---
-            const isRapid = rate <= 4;
-            
-            if(player.ammo === 'piercing') {
-                addShake(isRapid ? 0.5 : 2); // Reduce Railgun kick during rapid fire
-            } else if(player.ammo === 'explosive') {
-                addShake(isRapid ? 0.2 : 1); // Reduce Flak kick
-            } else {
-                // Standard shake for others, reduced slightly if rapid
-                if (frame % 2 === 0 || !isRapid) {
-                     // Only add standard shake every other frame if rapid to prevent jitter
-                     addShake(1); 
-                }
-            }
-            
-            makePart(player.x + Math.cos(player.angle)*20, player.y + Math.sin(player.angle)*20, type.color, 1, 3);
-
-            let barrelCount = player.barrel;
-            if (player.isOverdrive) barrelCount += 4; 
-
-            for(let i=0; i<barrelCount; i++) { 
-                const spread = (i - (barrelCount-1)/2) * 0.06; const a = player.angle + spread; 
-                bullets.push({ x: player.x + Math.cos(a)*20*gameScale, y: player.y + Math.sin(a)*20*gameScale, vx: Math.cos(a)*12*spd, vy: Math.sin(a)*12*spd, c: type.color, dmg: 10*type.dmg*player.dmgMult, pierce: type.pierce, type: player.ammo, shape: type.shape }); 
-            }
-            player.cooldown = rate; sfx('shoot', player.x);
-        }
-
-        function spawnEnemy() {
-            const ang = Math.random() * Math.PI * 2; const dist = (Math.max(window.innerWidth, window.innerHeight)/2 + 50); 
-            const rand = Math.random(); 
-            let typeKey = 'swarmer'; 
-
-            if (wave >= 8 && rand > 0.92) typeKey = 'railgunner'; 
-            else if (wave >= 6 && rand > 0.88) typeKey = 'siphon'; 
-            else if (wave >= 5 && rand > 0.95) typeKey = 'blinker';      
-            else if (wave >= 4 && rand > 0.90) typeKey = 'mortar';  
-            else if (wave >= 4 && rand > 0.85) typeKey = 'fracture';
-            else if (wave >= 4 && rand > 0.80) typeKey = 'stalker'; 
-            else if (wave >= 3 && rand > 0.80) typeKey = 'weaver';  
-            else if (wave >= 3 && rand > 0.75) typeKey = 'lancer';  
-            else if (wave >= 3 && rand > 0.60) typeKey = 'tank';    
-            else if (wave >= 2 && rand > 0.60) typeKey = 'spinner'; 
-            
-            lastSpawnType = typeKey;
-            
-            const stats = ENEMY_TYPES[typeKey];
-            enemies.push({ 
-                id: Math.random(), type: typeKey, x: window.innerWidth/2 + Math.cos(ang)*dist, y: window.innerHeight/2 + Math.sin(ang)*dist, 
-                hp: (10 + wave*2) * stats.hpMult, maxHp: (10 + wave*2) * stats.hpMult, r: stats.radius, s: stats.speed + (Math.random()*0.2), c: stats.color, mass: stats.mass, sides: stats.sides, rotation: 0, spinSpeed: (Math.random() - 0.5) * 0.1, hitTimer: 0, burnTimer: 0, poisonTimer: 0, shape: stats.shape, range: stats.range 
-            });
-
-            if (typeKey === 'stalker') { enemies[enemies.length-1].phaseTimer = 120; enemies[enemies.length-1].isPhased = false; }
-            if (typeKey === 'railgunner') { enemies[enemies.length-1].aimTimer = 0; enemies[enemies.length-1].isAiming = false; }
-            if (typeKey === 'siphon') { enemies[enemies.length-1].angleOffset = Math.random() * Math.PI * 2; }
-        }
-        
-        function makePart(x, y, c, n, sizeBase = 2) { for(let i=0; i<n; i++) { const p = particlePool[particleIndex]; p.active = true; p.x = x; p.y = y; p.vx = (Math.random()-0.5)*5; p.vy = (Math.random()-0.5)*5; p.c = c; p.l = 20; p.size = sizeBase + Math.random()*2; particleIndex = (particleIndex + 1) % MAX_PARTICLES; } }
-        function spawnTrail(x, y, c, s) { const p = particlePool[particleIndex]; p.active = true; p.x = x; p.y = y; p.vx = (Math.random()-0.5)*0.5; p.vy = (Math.random()-0.5)*0.5; p.c = c; p.l = 15; p.size = s || 2; particleIndex = (particleIndex + 1) % MAX_PARTICLES; }
-        function createFloatingText(x, y, txt, col) { floatingTexts.push({ x:x, y:y, t:txt, c:col, life:60 }); }
-        
-        function levelUp() {
-            player.lvl++; player.xp = Math.max(0, player.xp - player.nextXp); player.nextXp = Math.floor(player.nextXp * 1.1 + 50); document.getElementById('perk-txt').innerText = "NEXT: LEVEL " + (player.lvl+1);
-            if (player.lvl % 10 === 0) { 
-                if(player.barrel < 8) player.barrel++; 
-                showEvolutionMenu(); 
-                return true; 
-            }
-            if (player.lvl % 5 === 0) { 
-                if(player.barrel < 8) {
-                    player.barrel++; 
-                    createFloatingText(player.x, player.y-60 * gameScale, "EXTRA BARREL!", "#0f0"); 
-                } else {
-                    player.hp = player.maxHp;
-                    createFloatingText(player.x, player.y-60 * gameScale, "HULL REPAIRED", "#0f0");
-                }
-                return false; 
-            }
-            if (player.lvl % 3 === 0) { showAmmoMenu(); return true; }
-            showPerkMenu(); return true;
-        }
-
-        function showEvolutionMenu() { state = 'PAUSED'; isInputLocked = true; const el = document.getElementById('menu-evolution'); el.classList.remove('hidden'); const list = document.getElementById('evolution-list'); list.innerHTML = ''; EVOLUTIONS.forEach(p => { const div = document.createElement('div'); div.className='card'; div.style.borderColor = p.color; div.innerHTML = `<h3 style="color:${p.color}">${p.name}</h3><p>${p.desc}</p>`; div.onclick = (e) => { e.stopPropagation(); p.run(player); el.classList.add('hidden'); isInputLocked = false; state='PLAY'; createFloatingText(player.x, player.y-50 * gameScale, "EVOLUTION COMPLETE", p.color); makePart(player.x, player.y, "#fff", 30); }; list.appendChild(div); }); }
-        
-        function triggerEquipEffect(key) { const type = AMMO[key]; sfx('equip'); makePart(player.x, player.y, type.color, 20); createFloatingText(player.x, player.y - 50 * gameScale, "WEAPON ONLINE", type.color); }
-        function showAmmoMenu() { state = 'PAUSED'; isInputLocked = true; const el = document.getElementById('menu-ammo'); el.classList.remove('hidden'); const list = document.getElementById('ammo-list'); list.innerHTML = ''; Object.keys(AMMO).forEach(key => { const type = AMMO[key]; const div = document.createElement('div'); div.className='card'; div.style.borderColor = type.color; div.innerHTML = `<h3 style="color:${type.color}">${type.name}</h3><p>${type.desc}</p>`; const selectAmmo = (e) => { e.stopPropagation(); div.classList.add('selected'); player.ammo = key; updateAmmoDisplay(); setTimeout(() => { triggerEquipEffect(key); el.classList.add('hidden'); isInputLocked = false; state='PLAY'; }, 400); }; div.onclick = selectAmmo; list.appendChild(div); }); }
-        
-        function showPerkMenu() { 
-            state = 'PAUSED'; 
+        // UPDATED GAME OVER LOGIC
+        function gameOver() { 
+            state = 'OVER'; 
             isInputLocked = true; 
-            const el = document.getElementById('menu-upgrade'); 
-            el.classList.remove('hidden'); 
-            const list = document.getElementById('card-list'); 
-            list.innerHTML = ''; 
-            const shuffledPerks = shuffleArray([...PERKS]);
-            shuffledPerks.slice(0,3).forEach(p => { 
-                const div = document.createElement('div'); 
-                div.className='card'; 
-                const color = p.color || '#0ff'; 
-                div.style.borderColor = color; 
-                div.innerHTML = `<h3 style="color:${color}">${p.name}</h3><p>${p.desc}</p>`; 
-                div.onclick = (e) => { 
-                    e.stopPropagation(); 
-                    APPLIED_PERKS[p.id] = (APPLIED_PERKS[p.id] || 0) + 1; 
-                    p.run(player); 
-                    el.classList.add('hidden'); 
-                    isInputLocked = false; 
-                    state='PLAY'; 
-                }; 
-                list.appendChild(div); 
-            }); 
+            document.getElementById('menu-over').classList.remove('hidden'); 
+            document.getElementById('final-score').innerText = Math.floor(score); 
+            if (score > highScore) { 
+                highScore = score; 
+                localStorage.setItem('neonPrime_highScore', highScore); 
+                document.getElementById('new-record-msg').classList.remove('hidden'); 
+            } else { 
+                document.getElementById('new-record-msg').classList.add('hidden'); 
+            } 
+            document.getElementById('over-best').innerText = Math.floor(highScore); 
+            localStorage.removeItem('neonPrime_saveState');
+            
+            // NEW: Request name and submit score
+            if(score > 0) {
+                setTimeout(() => {
+                    const name = prompt("MISSION FAILED. ENTER CALLSIGN:", "COMMANDER");
+                    if(name) {
+                        submitScoreToServer(name, Math.floor(score), wave);
+                    } else {
+                        document.getElementById('leaderboard-display').innerText = "SCORE NOT UPLOADED";
+                    }
+                }, 500);
+            }
         }
-
-        function gameOver() { state = 'OVER'; isInputLocked = true; document.getElementById('menu-over').classList.remove('hidden'); document.getElementById('final-score').innerText = Math.floor(score); if (score > highScore) { highScore = score; localStorage.setItem('neonPrime_highScore', highScore); document.getElementById('new-record-msg').classList.remove('hidden'); } else { document.getElementById('new-record-msg').classList.add('hidden'); } document.getElementById('over-best').innerText = Math.floor(highScore); localStorage.removeItem('neonPrime_saveState'); }
 
         function draw() {
             ctx.globalAlpha = 1; ctx.drawImage(bgCanvas, 0, 0);
