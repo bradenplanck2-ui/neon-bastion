@@ -3,19 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v13.2 (Online)</title>
+    <title>Neon Prime: Bastion v13.3 (Debug Mode)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#050510">
     
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22 style=%22background:%23050510%22><circle cx=%22256%22 cy=%22256%22 r=%22100%22 fill=%22none%22 stroke=%22%230ff%22 stroke-width=%2220%22/><path d=%22M256 50 L256 150 M256 362 L256 462 M50 256 L150 256 M362 256 L462 256%22 stroke=%22%23f0f%22 stroke-width=%2220%22/></svg>">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Orbitron', sans-serif; background-color: #050510; color: #ffffff; overflow: hidden; touch-action: none; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; width: 100vw; height: 100dvh; }
         canvas { display: block; width: 100%; height: 100%; background-color: #050510; pointer-events: auto; }
+        
+        /* ERROR BOX STYLING */
+        #error-logger { position: absolute; top: 0; left: 0; width: 100%; background: rgba(255,0,0,0.9); color: white; padding: 10px; z-index: 9999; font-family: monospace; font-size: 12px; display: none; pointer-events: none; white-space: pre-wrap; }
+
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
         .hud-top { position: absolute; top: 0; left: 0; width: 100%; padding: 2vmin; background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent); display: flex; justify-content: space-between; align-items: flex-start; }
         .stats { font-size: 2.5vmin; font-weight: bold; text-shadow: 0 0 10px rgba(0, 255, 255, 0.7), 0 0 4px cyan; display: flex; gap: 3vmin; }
@@ -66,8 +68,7 @@
         .card h3 { margin: 0 0 5px 0; font-size: 16px; text-shadow: 0 0 4px currentColor; }
         .card p { font-size: 12px; color: #aaa; margin: 0; }
         #boot-log { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: lime; font-family: monospace; font-size: 12px; pointer-events: none; z-index: 200; opacity: 0; transition: opacity 1s; }
-        #debug-overlay { position: absolute; top: 0; left: 0; z-index: 100; background: rgba(0, 0, 0, 0.7); color: #0f0; padding: 10px; font-family: monospace; font-size: 10px; pointer-events: none; width: 150px; }
-        .debug-stat { margin-bottom: 2px; }
+        
         #perk-list-container::-webkit-scrollbar { width: 5px; }
         #perk-list-container::-webkit-scrollbar-track { background: #111; }
         #perk-list-container::-webkit-scrollbar-thumb { background: #0ff; border-radius: 3px; }
@@ -93,16 +94,7 @@
     <canvas id="gameCanvas"></canvas>
     <div id="scanlines"></div>
     <div id="boot-log">SYSTEM ONLINE</div>
-    <div id="debug-overlay" class="hidden">
-        <div class="text-xs font-bold mb-1 border-b border-gray-700">DEBUG (D)</div>
-        <div id="debug-fps" class="debug-stat">FPS: 0</div>
-        <div id="debug-state" class="debug-stat">STATE: MENU</div>
-        <div id="debug-entities" class="debug-stat">ENTITIES: 0</div>
-        <div id="debug-last-spawn" class="debug-stat text-yellow-300">LAST: -</div>
-        <div id="debug-hp" class="debug-stat">HP: 0 / 0</div>
-        <div id="debug-wave" class="debug-stat">WAVE: 1</div>
-        <div id="debug-ammo" class="debug-stat">AMMO: Standard</div>
-    </div>
+    <div id="error-logger"></div>
     
     <div id="mobile-controls">
         <div id="left-zone" class="touch-zone"></div> <div id="right-zone" class="touch-zone">
@@ -156,7 +148,7 @@
     <div id="menu-main" class="overlay">
         <div class="box">
             <h1 class="text-4xl font-bold text-cyan-400 mb-2" style="text-shadow: 0 0 15px cyan">NEON BASTION</h1>
-            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v13.2</p>
+            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v13.3</p>
             <p class="text-yellow-400 text-sm font-bold mb-6 border-b border-gray-700 pb-2">HIGH SCORE: <span id="menu-best">0</span></p>
             <button class="btn" onclick="startGame()">INITIALIZE</button>
             <button id="btn-load-game" class="btn hidden" onclick="loadGame()">LOAD SAVE STATE</button>
@@ -192,10 +184,17 @@
     </div>
 
     <script>
+        // --- ERROR LOGGER FOR MOBILE ---
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            const errorBox = document.getElementById('error-logger');
+            errorBox.style.display = 'block';
+            errorBox.innerText += `Error: ${msg} at line ${lineNo}\n`;
+            return false;
+        };
+
         // --- SERVER COMMUNICATION FUNCTIONS ---
         async function submitScoreToServer(playerName, score, wave) {
             try {
-                // Relative path works because frontend is served by backend
                 const response = await fetch('/api/score', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -245,7 +244,6 @@
         let lastDomCombo = -1;
         let lastDomOd = -1; 
         
-        // TOUCH / JOYSTICK GLOBALS
         const joystick = { active: false, originX: 0, originY: 0, currentX: 0, currentY: 0, angle: 0 };
         
         let audioCtx = null;
@@ -346,44 +344,48 @@
 
         function initAudio() {
             if (audioCtx) return; 
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AudioContext();
-            masterGain = audioCtx.createGain();
-            masterGain.gain.value = 0.4; 
-            const compressor = audioCtx.createDynamicsCompressor();
-            compressor.threshold.value = -24;
-            compressor.knee.value = 30;
-            compressor.ratio.value = 12;
-            compressor.attack.value = 0.003;
-            compressor.release.value = 0.25;
-            masterGain.connect(compressor);
-            compressor.connect(audioCtx.destination);
-            noiseBuffer = createNoiseBuffer();
-            startAmbience();
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 0.4; 
+                const compressor = audioCtx.createDynamicsCompressor();
+                compressor.threshold.value = -24;
+                compressor.knee.value = 30;
+                compressor.ratio.value = 12;
+                compressor.attack.value = 0.003;
+                compressor.release.value = 0.25;
+                masterGain.connect(compressor);
+                compressor.connect(audioCtx.destination);
+                noiseBuffer = createNoiseBuffer();
+                startAmbience();
+            } catch(e) { console.error("Audio init failed", e); }
         }
 
         function startAmbience() {
             if (!audioCtx || droneOsc) return;
-            droneOsc = audioCtx.createOscillator();
-            const droneGain = audioCtx.createGain();
-            const filter = audioCtx.createBiquadFilter();
-            droneOsc.type = 'sawtooth';
-            droneOsc.frequency.value = 55; 
-            filter.type = 'lowpass';
-            filter.frequency.value = 120;
-            droneGain.gain.value = 0.15;
-            const lfo = audioCtx.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.2; 
-            const lfoGain = audioCtx.createGain();
-            lfoGain.gain.value = 50;
-            lfo.connect(lfoGain);
-            lfoGain.connect(filter.frequency);
-            droneOsc.connect(filter);
-            filter.connect(droneGain);
-            droneGain.connect(masterGain);
-            droneOsc.start();
-            lfo.start();
+            try {
+                droneOsc = audioCtx.createOscillator();
+                const droneGain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+                droneOsc.type = 'sawtooth';
+                droneOsc.frequency.value = 55; 
+                filter.type = 'lowpass';
+                filter.frequency.value = 120;
+                droneGain.gain.value = 0.15;
+                const lfo = audioCtx.createOscillator();
+                lfo.type = 'sine';
+                lfo.frequency.value = 0.2; 
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 50;
+                lfo.connect(lfoGain);
+                lfoGain.connect(filter.frequency);
+                droneOsc.connect(filter);
+                filter.connect(droneGain);
+                droneGain.connect(masterGain);
+                droneOsc.start();
+                lfo.start();
+            } catch(e) { console.error("Ambience failed", e); }
         }
 
         function sfx(type, xPos = null) {
@@ -653,7 +655,6 @@
 
         function levelUp() {
             player.lvl++; player.xp = Math.max(0, player.xp - player.nextXp); player.nextXp = Math.floor(player.nextXp * 1.1 + 50); document.getElementById('perk-txt').innerText = "NEXT: LEVEL " + (player.lvl+1);
-            
             if (player.lvl % 10 === 0) { 
                 if(player.barrel < 8) player.barrel++; 
                 showEvolutionMenu(); 
@@ -669,24 +670,41 @@
                 }
                 return false; 
             }
-            
             if (player.lvl % 3 === 0) { showAmmoMenu(); return true; }
             showPerkMenu(); return true;
         }
 
-        function resetPlayer() {
-            player = { x: window.innerWidth/2, y: window.innerHeight/2, hp: 100, maxHp: 100, xp: 0, nextXp: 50, lvl: 1, angle: 0, cooldown: 0, ammo: 'standard', barrel: 1, spread: 0, dmgMult: 1, spdMult: 1, fireRate: 15, xpMult: 1, critChance: 0.05, regen: 0, durationMult: 1, damageReduction: 1, radius: 15, pickupRange: 400, activeBuffs: {}, hasShield: false, invuln: 0, hullShape: 'circle', hue: 0, drones: 0, combo: 0, comboTimer: 0, overdrive: 0, maxOverdrive: 100, isOverdrive: false };
-        }
+        function showEvolutionMenu() { state = 'PAUSED'; isInputLocked = true; const el = document.getElementById('menu-evolution'); el.classList.remove('hidden'); const list = document.getElementById('evolution-list'); list.innerHTML = ''; EVOLUTIONS.forEach(p => { const div = document.createElement('div'); div.className='card'; div.style.borderColor = p.color; div.innerHTML = `<h3 style="color:${p.color}">${p.name}</h3><p>${p.desc}</p>`; div.onclick = (e) => { e.stopPropagation(); p.run(player); el.classList.add('hidden'); isInputLocked = false; state='PLAY'; createFloatingText(player.x, player.y-50 * gameScale, "EVOLUTION COMPLETE", p.color); makePart(player.x, player.y, "#fff", 30); }; list.appendChild(div); }); }
         
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
-        }
+        function triggerEquipEffect(key) { const type = AMMO[key]; sfx('equip'); makePart(player.x, player.y, type.color, 20); createFloatingText(player.x, player.y - 50 * gameScale, "WEAPON ONLINE", type.color); }
+        function showAmmoMenu() { state = 'PAUSED'; isInputLocked = true; const el = document.getElementById('menu-ammo'); el.classList.remove('hidden'); const list = document.getElementById('ammo-list'); list.innerHTML = ''; Object.keys(AMMO).forEach(key => { const type = AMMO[key]; const div = document.createElement('div'); div.className='card'; div.style.borderColor = type.color; div.innerHTML = `<h3 style="color:${type.color}">${type.name}</h3><p>${type.desc}</p>`; const selectAmmo = (e) => { e.stopPropagation(); div.classList.add('selected'); player.ammo = key; updateAmmoDisplay(); setTimeout(() => { triggerEquipEffect(key); el.classList.add('hidden'); isInputLocked = false; state='PLAY'; }, 400); }; div.onclick = selectAmmo; list.appendChild(div); }); }
         
-        // UPDATED GAME OVER LOGIC
+        function showPerkMenu() { 
+            state = 'PAUSED'; 
+            isInputLocked = true; 
+            const el = document.getElementById('menu-upgrade'); 
+            el.classList.remove('hidden'); 
+            const list = document.getElementById('card-list'); 
+            list.innerHTML = ''; 
+            const shuffledPerks = shuffleArray([...PERKS]);
+            shuffledPerks.slice(0,3).forEach(p => { 
+                const div = document.createElement('div'); 
+                div.className='card'; 
+                const color = p.color || '#0ff'; 
+                div.style.borderColor = color; 
+                div.innerHTML = `<h3 style="color:${color}">${p.name}</h3><p>${p.desc}</p>`; 
+                div.onclick = (e) => { 
+                    e.stopPropagation(); 
+                    APPLIED_PERKS[p.id] = (APPLIED_PERKS[p.id] || 0) + 1; 
+                    p.run(player); 
+                    el.classList.add('hidden'); 
+                    isInputLocked = false; 
+                    state='PLAY'; 
+                }; 
+                list.appendChild(div); 
+            }); 
+        }
+
         function gameOver() { 
             state = 'OVER'; 
             isInputLocked = true; 
@@ -702,7 +720,6 @@
             document.getElementById('over-best').innerText = Math.floor(highScore); 
             localStorage.removeItem('neonPrime_saveState');
             
-            // NEW: Request name and submit score
             if(score > 0) {
                 setTimeout(() => {
                     const name = prompt("MISSION FAILED. ENTER CALLSIGN:", "COMMANDER");
@@ -769,7 +786,6 @@
             }
 
             enemies.forEach(e => {
-                // NEW: Railgunner Laser Sight
                 if (e.type === 'railgunner' && e.isAiming) {
                     ctx.save();
                     ctx.strokeStyle = `rgba(255, 0, 0, ${1 - (e.aimTimer / 120)})`; 
@@ -838,7 +854,6 @@
             
             ctx.restore(); 
             
-            // Draw Joystick if active
             if (joystick.active) {
                 ctx.save();
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
@@ -855,7 +870,10 @@
 
             floatingTexts.forEach(t => { ctx.fillStyle = t.c; ctx.font = `bold ${14 * gameScale}px Orbitron`; ctx.textAlign = "center"; ctx.globalAlpha = t.life / 60; ctx.fillText(t.t, t.x, t.y); ctx.globalAlpha = 1; });
             ctx.shadowBlur = 0; ctx.restore();
-        }
+        } 
+
+        // Attach startGame to window so button can call it
+        window.startGame = startGame;
 
         window.onload = init;
     </script>
