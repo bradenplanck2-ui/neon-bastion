@@ -3,12 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v13.3 (Debug Mode)</title>
+    <title>Neon Prime: Bastion v13.4</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#050510">
+    <meta name="apple-mobile-web-app-title" content="Neon Bastion">
     
+    <link rel="icon" type="image/jpeg" href="icon.jpg">
+    <link rel="shortcut icon" type="image/jpeg" href="icon.jpg">
+    <link rel="apple-touch-icon" href="icon.jpg">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -68,7 +73,8 @@
         .card h3 { margin: 0 0 5px 0; font-size: 16px; text-shadow: 0 0 4px currentColor; }
         .card p { font-size: 12px; color: #aaa; margin: 0; }
         #boot-log { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: lime; font-family: monospace; font-size: 12px; pointer-events: none; z-index: 200; opacity: 0; transition: opacity 1s; }
-        
+        #debug-overlay { position: absolute; top: 0; left: 0; z-index: 100; background: rgba(0, 0, 0, 0.7); color: #0f0; padding: 10px; font-family: monospace; font-size: 10px; pointer-events: none; width: 150px; }
+        .debug-stat { margin-bottom: 2px; }
         #perk-list-container::-webkit-scrollbar { width: 5px; }
         #perk-list-container::-webkit-scrollbar-track { background: #111; }
         #perk-list-container::-webkit-scrollbar-thumb { background: #0ff; border-radius: 3px; }
@@ -148,7 +154,7 @@
     <div id="menu-main" class="overlay">
         <div class="box">
             <h1 class="text-4xl font-bold text-cyan-400 mb-2" style="text-shadow: 0 0 15px cyan">NEON BASTION</h1>
-            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v13.3</p>
+            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v13.4</p>
             <p class="text-yellow-400 text-sm font-bold mb-6 border-b border-gray-700 pb-2">HIGH SCORE: <span id="menu-best">0</span></p>
             <button class="btn" onclick="startGame()">INITIALIZE</button>
             <button id="btn-load-game" class="btn hidden" onclick="loadGame()">LOAD SAVE STATE</button>
@@ -184,7 +190,6 @@
     </div>
 
     <script>
-        // --- ERROR LOGGER FOR MOBILE ---
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             const errorBox = document.getElementById('error-logger');
             errorBox.style.display = 'block';
@@ -192,7 +197,6 @@
             return false;
         };
 
-        // --- SERVER COMMUNICATION FUNCTIONS ---
         async function submitScoreToServer(playerName, score, wave) {
             try {
                 const response = await fetch('/api/score', {
@@ -222,7 +226,6 @@
             html += "</table>";
             list.innerHTML = html;
         }
-        // --------------------------------------
 
         let canvas, ctx, bgCanvas, bgCtx;
         let dpr = Math.min(window.devicePixelRatio || 1, 2); 
@@ -786,6 +789,7 @@
             }
 
             enemies.forEach(e => {
+                // NEW: Railgunner Laser Sight
                 if (e.type === 'railgunner' && e.isAiming) {
                     ctx.save();
                     ctx.strokeStyle = `rgba(255, 0, 0, ${1 - (e.aimTimer / 120)})`; 
@@ -854,6 +858,7 @@
             
             ctx.restore(); 
             
+            // Draw Joystick if active
             if (joystick.active) {
                 ctx.save();
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
