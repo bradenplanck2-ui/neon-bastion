@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v16.1 (ICON FIXED)</title>
+    <title>Neon Prime: Bastion v16.3 (FLUID BEAMS)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -162,7 +162,7 @@
     <div id="menu-main" class="overlay">
         <div class="box">
             <h1 class="text-4xl font-bold text-cyan-400 mb-2" style="text-shadow: 0 0 15px cyan">NEON BASTION</h1>
-            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v16.1 (ENDLESS)</p>
+            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v16.3 (FLUID BEAMS)</p>
             <p class="text-yellow-400 text-sm font-bold mb-6 border-b border-gray-700 pb-2">HIGH SCORE: <span id="menu-best">0</span></p>
             <button class="btn" id="btn-initialize">INITIALIZE</button>
             <button id="btn-load-game" class="btn hidden" onclick="loadGame()">LOAD SAVE STATE</button>
@@ -539,7 +539,14 @@
                 
                 // Laser logic handled separately in draw/update
                 if (player.ammo === 'laser') {
-                    lasers.push({ a: ang, c: type.color, life: 5 });
+                    // FIX: FLUID BEAM LOGIC - Store the offset, not just angle
+                    // This allows the beam to rotate WITH the player
+                    lasers.push({ 
+                        a: ang, 
+                        offset: ang - player.angle, // Store offset relative to aim
+                        c: type.color, 
+                        life: player.fireRate + 2 
+                    });
                     continue;
                 }
                 
@@ -1093,6 +1100,14 @@
                         if(b.pierce > 0) b.pierce--; else { bullets.splice(i,1); break; }
                     }
                 }
+            }
+
+            // FIX: Cleanup & Update Lasers (Lock to aim with offset)
+            for(let i=lasers.length-1; i>=0; i--) {
+                lasers[i].life--;
+                // FLUID BEAM: Update angle to match player current aim + offset
+                lasers[i].a = player.angle + (lasers[i].offset || 0);
+                if(lasers[i].life <= 0) lasers.splice(i,1);
             }
 
             for(let i=enemies.length-1; i>=0; i--) {
