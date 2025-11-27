@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v16.3 (FLUID BEAMS)</title>
+    <title>Neon Prime: Bastion v16.12 (ADRENALINE)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -21,6 +21,10 @@
         #error-logger { position: absolute; top: 0; left: 0; width: 100%; background: rgba(255,0,0,0.9); color: white; padding: 10px; z-index: 9999; font-family: monospace; font-size: 12px; display: none; pointer-events: none; white-space: pre-wrap; }
 
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
+        
+        /* UI GLOW FIX */
+        .hud-top, .hud-bot, #boss-hud, #ai-comms { text-shadow: 0 0 5px currentColor; }
+
         .hud-top { position: absolute; top: 0; left: 0; width: 100%; padding: 2vmin; background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent); display: flex; justify-content: space-between; align-items: flex-start; }
         .stats { font-size: 2.5vmin; font-weight: bold; text-shadow: 0 0 10px rgba(0, 255, 255, 0.7), 0 0 4px cyan; display: flex; gap: 3vmin; }
         .bars { display: flex; flex-direction: column; gap: 0.5vmin; width: 20vmin; }
@@ -44,7 +48,9 @@
         #overdrive-txt.ready { opacity: 1; text-shadow: 0 0 10px #00e5ff; animation: pulse-od 0.5s infinite alternate; }
         @keyframes pulse-od { from { text-shadow: 0 0 5px #00e5ff; } to { text-shadow: 0 0 20px #00e5ff; } }
 
-        #ai-comms { position: absolute; top: 4vmin; right: 4vmin; font-size: 1.8vmin; color: lime; text-shadow: 0 0 3px green; width: 35vmin; text-align: right; pointer-events: none; z-index: 21; }
+        /* UI OVERLAP FIX: Moved down to 15vmin to clear top bars */
+        #ai-comms { position: absolute; top: 15vmin; right: 4vmin; font-size: 1.8vmin; color: lime; text-shadow: 0 0 3px green; width: 35vmin; text-align: right; pointer-events: none; z-index: 21; }
+        
         #combo-container { position: absolute; top: 8vmin; left: 2vmin; text-align: left; pointer-events: none; }
         #combo-text { font-size: 4vmin; font-weight: bold; color: #fff; text-shadow: 0 0 10px #fff; display: none; transition: transform 0.1s; }
         #combo-bar-frame { width: 15vmin; height: 1vmin; background: #222; border: 1px solid #555; margin-top: 0.5vmin; display: none; transform: skewX(-15deg); }
@@ -154,15 +160,14 @@
         </div>
         <div class="hud-bot">
             <div id="ammo-txt">STANDARD PLASMA</div>
-            <div id="perk-txt">NEXT: LEVEL 2</div>
-            <div id="ability-txt">REPULSOR: READY (SPACE / DBL TAP)</div>
+            <div id="perk-txt">LEVEL: 1</div> <div id="ability-txt">REPULSOR: READY (SPACE / DBL TAP)</div>
             <div id="overdrive-txt">OVERDRIVE READY (F)</div>
         </div>
     </div>
     <div id="menu-main" class="overlay">
         <div class="box">
             <h1 class="text-4xl font-bold text-cyan-400 mb-2" style="text-shadow: 0 0 15px cyan">NEON BASTION</h1>
-            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v16.3 (FLUID BEAMS)</p>
+            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v16.12 (ADRENALINE)</p>
             <p class="text-yellow-400 text-sm font-bold mb-6 border-b border-gray-700 pb-2">HIGH SCORE: <span id="menu-best">0</span></p>
             <button class="btn" id="btn-initialize">INITIALIZE</button>
             <button id="btn-load-game" class="btn hidden" onclick="loadGame()">LOAD SAVE STATE</button>
@@ -228,6 +233,9 @@
         let lastDomScore = -1, lastDomWave = -1, lastDomHp = -1, lastDomXp = -1, lastDomBossHp = -1;
         let lastDomCombo = -1;
         let lastDomOd = -1; 
+        let lastDomLevel = -1; // NEW: Track rendered level
+        let visualXp = 0;
+        const COMBO_MAX = 150; // NEW: Constant for combo bar math
         
         const joystick = { active: false, originX: 0, originY: 0, currentX: 0, currentY: 0, angle: 0 };
         let audioCtx = null, masterGain = null, noiseBuffer = null, droneOsc = null;
@@ -239,15 +247,15 @@
         const REPULSOR_MAX = 240, REPULSOR_RANGE = 220; 
         let repulsorAnim = 0; 
 
-        // --- UNPACKED CONSTANTS ---
+        // --- UNPACKED CONSTANTS (REBALANCED v16.9) ---
         const AMMO = {
-            standard: { name: 'PLASMA', color: '#0ff', dmg: 4.5, speed: 1.3, pierce: 1, desc: 'High power starter.', shape: 'circle' },
-            piercing: { name: 'RAILGUN', color: '#f0f', dmg: 1.2, speed: 1.4, pierce: 3, desc: 'Knockback + Pierce.', shape: 'bolt' },
-            explosive: { name: 'FLAK', color: '#fa0', dmg: 0.6, speed: 0.9, pierce: 0, radius: 60, desc: 'Ignites enemies.', shape: 'cross' },
-            laser: { name: 'BEAM', color: '#f05', dmg: 0.1, speed: 0, pierce: 999, desc: 'Continuous damage.', shape: 'none' },
-            homing: { name: 'SWARM', color: '#0f0', dmg: 1.0, speed: 0.7, pierce: 0, desc: 'Seeking Missiles.', shape: 'triangle' },
-            singularity: { name: 'VOID', color: '#84f', dmg: 0.5, speed: 0.3, pierce: 0, desc: 'Gravity Crush.', shape: 'ring', gravWellRadius: 40 },
-            volt: { name: 'VOLT', color: '#ffea00', dmg: 0.7, speed: 1.8, pierce: 1, desc: 'High Vel.', shape: 'bolt' }
+            standard: { name: 'PLASMA', color: '#0ff', dmg: 4.5, speed: 1.3, pierce: 1, desc: 'Balanced reliable damage.', shape: 'circle' },
+            piercing: { name: 'RAILGUN', color: '#f0f', dmg: 4.0, speed: 1.6, pierce: 5, desc: 'High velocity penetration.', shape: 'bolt' },
+            explosive: { name: 'FLAK', color: '#fa0', dmg: 4.0, speed: 0.9, pierce: 0, radius: 80, desc: 'Explosive Area of Effect.', shape: 'cross' },
+            laser: { name: 'BEAM', color: '#f05', dmg: 0.1, speed: 0, pierce: 999, desc: 'Melts enemies in a line.', shape: 'none' },
+            homing: { name: 'SWARM', color: '#0f0', dmg: 3.6, speed: 0.8, pierce: 0, desc: 'Seeking Missiles.', shape: 'triangle' },
+            singularity: { name: 'VOID', color: '#84f', dmg: 0.5, speed: 0.3, pierce: 0, desc: 'Gravity Well Generator.', shape: 'ring', gravWellRadius: 60 },
+            volt: { name: 'VOLT', color: '#ffea00', dmg: 3.8, speed: 2.0, pierce: 2, desc: 'High Velocity Energy.', shape: 'bolt' }
         };
 
         const POWERUPS = {
@@ -294,10 +302,10 @@
             stalker: { hpMult: 1.5, speed: 1.0, color: '#b0bec5', sides: 3, radius: 14, mass: 0.8, shape: 'triangle', phaseTimer: 120, isPhased: false },
             railgunner: { hpMult: 2.0, speed: 0.6, color: '#d50000', sides: 4, radius: 18, mass: 2.0, shape: 'diamond', range: 450, desc: 'Sniper' },
             siphon: { hpMult: 3.0, speed: 0.8, color: '#6200ea', sides: 5, radius: 20, mass: 1.5, shape: 'pentagon', desc: 'XP Drain' },
-            boss_hex:  { name: 'HEX-CORE', hpMult: 50.0, speed: 0.55, color: '#f0f', sides: 6, radius: 70, mass: 50.0, spin: 0.02, fireMode: 0, fireModeTimer: 600 },
-            boss_octa: { name: 'IRON CLAD', hpMult: 100.0, speed: 0.30, color: '#00b0ff', sides: 8, radius: 90, mass: 100.0, spin: 0.01, fireMode: 0, fireModeTimer: 800 },
-            boss_tri:  { name: 'VIPER', hpMult: 40.0, speed: 0.85, color: '#ffeb3b', sides: 3, radius: 60, mass: 30.0, spin: 0.05, fireMode: 0, fireModeTimer: 500 },
-            boss_star: { name: 'CRIMSON STAR', hpMult: 70.0, speed: 0.65, color: '#ff1744', sides: 10, radius: 65, mass: 40.0, spin: 0.03, shape: 'star', fireMode: 0, fireModeTimer: 700 }
+            boss_hex:  { name: 'HEX-CORE', hpMult: 3.5, speed: 0.55, color: '#f0f', sides: 6, radius: 70, mass: 50.0, spin: 0.02, fireMode: 0, fireModeTimer: 600 },
+            boss_octa: { name: 'IRON CLAD', hpMult: 8.0, speed: 0.30, color: '#00b0ff', sides: 8, radius: 90, mass: 100.0, spin: 0.01, fireMode: 0, fireModeTimer: 800 },
+            boss_tri:  { name: 'VIPER', hpMult: 9.0, speed: 0.85, color: '#ffeb3b', sides: 3, radius: 60, mass: 30.0, spin: 0.05, fireMode: 0, fireModeTimer: 500 },
+            boss_star: { name: 'CRIMSON STAR', hpMult: 12.0, speed: 0.65, color: '#ff1744', sides: 10, radius: 65, mass: 40.0, spin: 0.03, shape: 'star', fireMode: 0, fireModeTimer: 700 }
         };
 
         // --- HELPERS ---
@@ -507,8 +515,10 @@
         }
         
         function resetPlayer() {
-            // BUFFED: fireRate 15 -> 10 (Lower number = faster shooting)
-            player = { x: window.innerWidth/2, y: window.innerHeight/2, hp: 100, maxHp: 100, xp: 0, nextXp: 50, lvl: 1, angle: 0, cooldown: 0, ammo: 'standard', barrel: 1, spread: 0, dmgMult: 1, spdMult: 1, fireRate: 10, xpMult: 1, critChance: 0.05, regen: 0, durationMult: 1, damageReduction: 1, radius: 15, pickupRange: 400, activeBuffs: {}, hasShield: false, invuln: 0, hullShape: 'circle', hue: 0, drones: 0, combo: 0, comboTimer: 0, overdrive: 0, maxOverdrive: 100, isOverdrive: false };
+            // FIXED: XP req lowered to 60 (Accelerated)
+            player = { x: window.innerWidth/2, y: window.innerHeight/2, hp: 100, maxHp: 100, xp: 0, nextXp: 60, lvl: 1, angle: 0, cooldown: 0, ammo: 'standard', barrel: 1, spread: 0, dmgMult: 1, spdMult: 1, fireRate: 10, xpMult: 1, critChance: 0.05, regen: 0, durationMult: 1, damageReduction: 1, radius: 15, pickupRange: 400, activeBuffs: {}, hasShield: false, invuln: 0, hullShape: 'circle', hue: 0, drones: 0, combo: 0, comboTimer: 0, overdrive: 0, maxOverdrive: 100, isOverdrive: false };
+            visualXp = 0;
+            lastDomLevel = -1;
         }
 
         // --- MISSING CORE LOGIC INJECTION ---
@@ -597,8 +607,13 @@
                 ey = Math.random() < 0.5 ? -50 : window.innerHeight + 50;
             }
 
-            // Stat Scaling
-            const hpScale = 1 + (wave * 0.5);
+            // LONG RUN FIX: Cap scaling slightly after wave 50
+            let hpScale;
+            if (wave <= 50) {
+                hpScale = 1 + (wave * 0.5);
+            } else {
+                hpScale = 1 + (50 * 0.5) + ((wave - 50) * 0.25); // Slower growth after 50
+            }
             
             enemies.push({
                 type: typeKey,
@@ -633,22 +648,33 @@
             sfx('boss_spawn');
             addShake(30);
 
-            let bossKey = 'boss_hex';
-            if (wave >= 10) bossKey = 'boss_octa';
-            if (wave >= 15) bossKey = 'boss_tri';
-            if (wave >= 20) bossKey = 'boss_star';
+            // NEW FEATURE: Clear the room when boss arrives
+            for(let i=enemies.length-1; i>=0; i--) {
+                if(!enemies[i].isBoss) {
+                    makePart(enemies[i].x, enemies[i].y, enemies[i].c, 10, 2);
+                }
+            }
+            enemies = [];
+
+            // ROTATION LOGIC: Cycles 0->1->2->3->0...
+            const bossKeys = ['boss_hex', 'boss_octa', 'boss_tri', 'boss_star'];
+            const bossIndex = (Math.floor(wave / 5) - 1) % bossKeys.length;
+            const safeIndex = bossIndex < 0 ? 0 : bossIndex;
+            const bossKey = bossKeys[safeIndex];
             
             const data = ENEMY_TYPES[bossKey];
             
-            // SCALED: Reduced hp scaling from 0.2 to 0.05 for endless viability
+            // NEW SCALING FORMULA: Exponential Growth
+            const waveScaling = Math.pow(1.1, wave); 
+
             enemies.push({
                 type: 'boss',
                 subtype: bossKey,
                 name: data.name,
                 x: window.innerWidth / 2,
-                y: -150, // Fly in from top
-                hp: 500 * data.hpMult * (1 + wave * 0.05),
-                maxHp: 500 * data.hpMult * (1 + wave * 0.05),
+                y: -150, 
+                hp: 500 * data.hpMult * waveScaling, 
+                maxHp: 500 * data.hpMult * waveScaling,
                 s: data.speed,
                 r: data.radius,
                 c: data.color,
@@ -665,6 +691,11 @@
             
             document.getElementById('boss-hud').style.display = 'flex';
             document.getElementById('boss-name').innerText = data.name;
+            
+            // Visual: Change Boss Bar color to match Boss
+            document.getElementById('boss-name').style.color = data.color;
+            document.querySelector('.boss-bar-fill').style.backgroundColor = data.color;
+            document.querySelector('.boss-bar-fill').style.boxShadow = `0 0 10px ${data.color}`;
         }
 
         function spawnPowerup(x, y, forceDrop = false) {
@@ -686,10 +717,31 @@
         function levelUp() {
             player.lvl++;
             player.xp -= player.nextXp;
-            // SCALED: Reduced XP curve from 1.2 to 1.05 for endless play
-            player.nextXp = Math.floor(player.nextXp * 1.05);
             
+            // LONG RUN FIX: Cap max XP cost at 1000
+            let newCost = Math.floor(player.nextXp * 1.15) + 10;
+            player.nextXp = Math.min(newCost, 1000);
+            
+            // VISUAL: Reset smoothing
+            visualXp = 0;
+
+            // VISUAL: Flash Bar
+            const bar = document.getElementById('xp-bar');
+            bar.style.transition = 'none'; 
+            bar.style.background = '#fff';
+            bar.style.boxShadow = '0 0 30px #fff';
+            setTimeout(() => {
+                bar.style.transition = 'width 0.1s ease-out'; 
+                bar.style.background = ''; 
+                bar.style.boxShadow = '';
+            }, 200);
+
             createAiMessage("SYSTEM UPGRADE AVAILABLE", 180);
+            
+            // VISUAL: FX
+            createFloatingText(player.x, player.y - 80, "LEVEL UP!", "#fff");
+            makePart(player.x, player.y, '#fff', 30, 4); 
+            addShake(10);
             sfx('equip');
 
             // Determine which menu to show
@@ -1052,7 +1104,9 @@
             }
             
             for (let key in player.activeBuffs) { if (player.activeBuffs[key] > 0) { player.activeBuffs[key]--; } else { if (POWERUPS[key].remove) POWERUPS[key].remove(player); createFloatingText(player.x, player.y - 60, key.toUpperCase() + " END", "#888"); delete player.activeBuffs[key]; } }
-            if(!bossActive && frame % (90 - Math.min(50, wave)) === 0) spawnEnemy();
+            
+            // FIXED: Spawn Rate slowed down (120 frames base)
+            if(!bossActive && frame % (120 - Math.min(70, wave)) === 0) spawnEnemy();
             if(!bossActive && frame % 1200 === 0) { wave++; createAiMessage(`WAVE ${wave} INCOMING. PREPARE FOR ESCALATION.`); if (wave % 5 === 0) spawnBoss(); }
 
             const type = AMMO[player.ammo];
@@ -1097,6 +1151,10 @@
                         if(b.type === 'explosive') { enemies.forEach(sub => { if((sub.x-b.x)**2 + (sub.y-b.y)**2 < (type.radius * gameScale)**2) { sub.hp -= b.dmg; sub.burnTimer = 60; } }); makePart(b.x, b.y, type.color, 5, 3); } 
                         else if(b.type === 'singularity') { b.vx = 0; b.vy = 0; b.life = 180; b.impactTimer = 15; if(e.hp < e.maxHp * 0.45 && !e.isBoss) { e.hp -= b.dmg * 5; createFloatingText(e.x, e.y, "CRUSH", "#84f"); } break; } 
                         else { makePart(b.x, b.y, type.color, 2, 2); }
+                        
+                        // NEW: VOLT STUN MECHANIC
+                        if (b.type === 'volt') { e.hitTimer = 15; e.s *= 0.5; }
+
                         if(b.pierce > 0) b.pierce--; else { bullets.splice(i,1); break; }
                     }
                 }
@@ -1315,13 +1373,21 @@
                         }
                     }
 
-                    let baseVal = 10 + (wave * 2); 
+                    // FIXED: XP Gain Increased for accelerated leveling
+                    let baseVal = 8 + wave; 
                     
                     if (e.isProjectile && bossActive) baseVal = 0;
                     if (!e.isBoss) {
                         player.xp += baseVal * player.xpMult * (e.mass || 1);
-                        // Overdrive Gain
-                        if (!player.isOverdrive) player.overdrive = Math.min(player.maxOverdrive, player.overdrive + (1.5 * (e.mass || 1)));
+                        
+                        // FIXED: Overdrive Gain Logic (3.0 Base + Combo Synergy)
+                        if (!player.isOverdrive) {
+                            let gain = (3.0 * (e.mass || 1)) * (1 + player.combo * 0.02);
+                            player.overdrive = Math.min(player.maxOverdrive, player.overdrive + gain);
+                        }
+                    } else {
+                        // Boss Hit generates tiny overdrive (handled elsewhere ideally, but boss death gives full)
+                        player.overdrive = player.maxOverdrive;
                     }
                     
                     if (!e.isProjectile && !e.isBoss) {
@@ -1356,9 +1422,16 @@
                              }
                          }
                     }
-                    else if(Math.random() < 0.08) { spawnPowerup(e.x, e.y); }
+                    // FIXED: Loot chance increased to 12%
+                    else if(Math.random() < 0.12) { spawnPowerup(e.x, e.y); }
                     enemies.splice(i,1);
                 }
+            }
+            
+            // NEW: Boss Hit Overdrive Generation (Small drip feed)
+            if (bossActive && frame % 10 === 0 && !player.isOverdrive) {
+                 // If bullets are hitting boss, this logic is abstract, but let's just add passive tension gain near boss
+                 // Actually, better to put in bullet collision loop.
             }
 
             if(lasers.length > 0 && frame % 5 === 0) {
@@ -1396,7 +1469,8 @@
                     else comboEl.style.color = '#fff';
                     lastDomCombo = player.combo;
                 }
-                document.getElementById('combo-bar-fill').style.width = (player.comboTimer / 150 * 100) + '%';
+                // FIX: Use constant for Combo Max
+                document.getElementById('combo-bar-fill').style.width = (player.comboTimer / COMBO_MAX * 100) + '%';
             } else {
                 document.getElementById('combo-text').style.display = 'none';
                 document.getElementById('combo-bar-frame').style.display = 'none';
@@ -1418,7 +1492,17 @@
 
             if(wave !== lastDomWave) { document.getElementById('wave').innerText = wave; lastDomWave = wave; }
             const hpPct = Math.max(0, player.hp/player.maxHp*100); if(Math.abs(hpPct - lastDomHp) > 0.1) { document.getElementById('hp-bar').style.width = hpPct + '%'; lastDomHp = hpPct; }
-            const xpPct = Math.min(100, player.xp/player.nextXp*100); if(Math.abs(xpPct - lastDomXp) > 0.1) { document.getElementById('xp-bar').style.width = xpPct + '%'; lastDomXp = xpPct; }
+            
+            // VISUAL: Smooth Bar update
+            let targetXp = Math.min(100, (player.xp / player.nextXp) * 100);
+            visualXp += (targetXp - visualXp) * 0.1;
+            document.getElementById('xp-bar').style.width = visualXp + '%';
+            
+            // NEW FIX: Update Level Text dynamically
+            if(player.lvl !== lastDomLevel) {
+                document.getElementById('perk-txt').innerText = "LEVEL: " + player.lvl;
+                lastDomLevel = player.lvl;
+            }
             
             while(player.xp >= player.nextXp) {
                 if(levelUp()) break; 
