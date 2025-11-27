@@ -1,20 +1,58 @@
-​🌌 Neon Prime: Bastion
-​Neon Prime: Bastion is a high-intensity, retro-arcade stationary shooter built entirely in Vanilla JavaScript.
-​Players command a stationary defense turret against endless waves of geometric enemies. The game features a deep progression system with branching perks, hull evolutions, distinct ammo types, and massive boss fights, all rendered in a 60 FPS neon-soaked HTML5 Canvas environment.
-​🚀 Key Features
-​🎮 Core Gameplay
-​Stationary Defense: You cannot move. You must aim, shoot, and use your Repulsor ability to survive.
-​Infinite Progression: Earn XP to level up. Choose from 11+ Perks (Fire Rate, Multishot, Drones) and 5 Hull Evolutions that change your turret's shape and stats.
-​7 Weapon Types: Switch between Plasma, Railgun, Flak, Beam, Swarm, Void, and Volt ammo.
-​Overdrive System: Charge your ultimate bar to unleash 5 seconds of infinite ammo and invulnerability.
-​👾 Enemy Intelligence
-​12 Distinct Enemy Types: From the phasing Stalker and sniping Railgunner to the resource-draining Siphon.
-​4 Epic Bosses: Face off against multi-phase bosses like the Iron Clad and Hex-Core every 5 waves.
-​Swarm AI: Enemies use flocking behaviors, orbit logic, and tactical retreats.
-​📱 Cross-Platform Engine
-​Hybrid Controls: Seamlessly switches between Mouse/Keyboard and Touch.
-​Smart Mobile HUD: Virtual joysticks and buttons automatically fade out when enemies move under your thumbs to prevent blind spots.
-​⚡ Technical Highlights
-​Zero Dependencies: The game engine is written in pure ES6 JavaScript without game libraries (Phaser/Unity).
-​Procedural Audio: All sound effects (explosions, lasers, UI) are synthesized in real-time using the Web Audio API. No asset files required.
-​Custom Rendering: Features a custom particle system, CRT scanline post-processing, and logarithmic screen shake.
+# 🛡️ Neon Prime: Bastion
+
+![Version](https://img.shields.io/badge/version-16.12-cyan?style=for-the-badge) ![Status](https://img.shields.io/badge/status-LIVE-green?style=for-the-badge) ![Tech](https://img.shields.io/badge/tech-HTML5_Canvas-orange?style=for-the-badge)
+
+**Neon Prime: Bastion** is a high-intensity, single-file roguelite survival shooter built entirely in vanilla JavaScript. It features procedural wave generation, an upgrade system, and synthesized audio—all contained within a single HTML file with **zero external assets**.
+
+### 🔗 [Play the Live Demo on Render](YOUR_RENDER_URL_HERE)
+
+---
+
+## 🕹️ Game Overview
+
+You are a stationary defense protocol. Your objective: Survive endless waves of geometric anomalies.
+The game utilizes an "Asset-Less" architecture. Every sound effect, particle, and texture is generated mathematically at runtime using the HTML5 Canvas API and Web Audio API.
+
+### Key Features
+* **Asset-Less Engine:** 0kb of images or audio files. Everything is drawn and synthesized via code.
+* **Infinite Scaling:** Difficulty scales exponentially (`1.1^Wave`).
+* **Roguelite Progression:** XP system with randomized perk cards and hull evolutions.
+* **Boss Rush System:** Duel unique bosses (Hex-Core, Iron Clad, Viper, Crimson Star) every 5 waves.
+* **Reactive UI:** Smart HUD that adapts to mobile touch controls and avoids occlusion.
+
+---
+
+## 🎮 Controls
+
+The game supports both Desktop (Mouse/Keyboard) and Mobile (Touch/Virtual Joystick).
+
+| Action | PC (Keyboard/Mouse) | Mobile (Touch) |
+| :--- | :--- | :--- |
+| **Aim** | Mouse Cursor | Left Virtual Joystick |
+| **Fire** | Hold Left Click | Auto-fire while aiming |
+| **Repulsor** | `SPACE` | Button / Double Tap Screen |
+| **Overdrive** | `F` | Button |
+| **Pause** | `P` or `ESC` | Top Right Pause Icon |
+
+## 🛠️ Technical Stack
+
+* **Core:** HTML5 Canvas (2D Context) for rendering.
+* **Logic:** Vanilla JavaScript (ES6+).
+* **Audio:** Web Audio API (Real-time synthesis using Oscillators and Noise Buffers).
+* **Styling:** Tailwind CSS (via CDN) for UI overlay.
+* **Persistence:** `localStorage` for High Scores and Save States.
+
+### Game Loop Architecture
+The engine uses a standard delta-time loop with optimized "dirty checking" for DOM updates to maintain 60 FPS.
+
+```javascript
+function loop() {
+    requestAnimationFrame(loop);
+    updateDebug();
+    // Game logic update
+    update();
+    // Canvas rendering
+    draw();
+}
+---
+🚀 **Dev Story:** This entire game engine, including the physics, audio synthesis, and balancing, was developed and deployed 100% on a mobile device using AI-assisted iteration.
