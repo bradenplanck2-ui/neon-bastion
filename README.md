@@ -45,16 +45,6 @@ The game supports both Desktop (Mouse/Keyboard) and Mobile (Touch/Virtual Joysti
 ### Game Loop Architecture
 The engine uses a standard delta-time loop with optimized "dirty checking" for DOM updates to maintain 60 FPS.
 
-```javascript
-function loop() {
-    requestAnimationFrame(loop);
-    updateDebug();
-    // Game logic update
-    update();
-    // Canvas rendering
-    draw();
-}
-
 ### 📱 Development Story
 **Engineered on Mobile.**
 This entire game engine—including the physics system, audio synthesis, and game balance—was developed, tested, and deployed 100% on a mobile device using AI-assisted iteration.
