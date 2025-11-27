@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v16.14 (SILENT SLEEP)</title>
+    <title>Neon Prime: Bastion v16.15 (OPTIMIZED)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -527,7 +527,226 @@
             lastDomLevel = -1;
         }
 
-        // --- MISSING CORE LOGIC INJECTION ---
+        // --- DRAW FUNCTION INJECTED HERE (FIXES CRASH + RENDERING BUGS) ---
+        function draw() {
+            // 1. Clear Screen with Trail Effect
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.4)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Draw Stars
+            ctx.fillStyle = '#fff';
+            stars.forEach(s => {
+                const size = Math.max(0.5, s.z * gameScale);
+                ctx.globalAlpha = Math.random() * 0.5 + 0.3;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            // 3. Draw Particles
+            for(let i=0; i<MAX_PARTICLES; i++) {
+                let p = particlePool[i];
+                if(!p.active) continue;
+                ctx.fillStyle = p.c;
+                ctx.globalAlpha = p.l / 20;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * gameScale, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // 4. Draw Powerups
+            powerups.forEach(p => {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = p.c;
+                ctx.strokeStyle = p.c;
+                ctx.lineWidth = 2;
+                const s = 10 * gameScale;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(frame * 0.1);
+                ctx.strokeRect(-s, -s, s*2, s*2);
+                ctx.restore();
+                ctx.shadowBlur = 0;
+            });
+
+            // 5. Draw Bullets
+            bullets.forEach(b => {
+                ctx.fillStyle = b.c;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = b.c;
+                ctx.beginPath();
+                // Draw shape based on ammo type
+                if (b.shape === 'bolt') {
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx));
+                    ctx.rect(-6*gameScale, -2*gameScale, 12*gameScale, 4*gameScale); ctx.fill(); ctx.restore();
+                } else {
+                    ctx.arc(b.x, b.y, 4 * gameScale, 0, Math.PI*2); ctx.fill();
+                }
+                ctx.shadowBlur = 0;
+            });
+
+            // 6. Draw Lasers
+            lasers.forEach(l => {
+                ctx.strokeStyle = l.c;
+                ctx.lineWidth = (Math.random() * 2 + 2) * gameScale;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = l.c;
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y);
+                const endX = player.x + Math.cos(l.a) * 2000;
+                const endY = player.y + Math.sin(l.a) * 2000;
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            });
+
+            // 7. Draw Enemies (FIXED: Star Logic)
+            enemies.forEach(e => {
+                if(e.type === 'stalker' && e.isPhased) ctx.globalAlpha = 0.15;
+                
+                ctx.strokeStyle = e.c;
+                ctx.lineWidth = 2;
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.rotate(e.rotation);
+                
+                ctx.beginPath();
+                const r = e.r * gameScale;
+                
+                if (e.shape === 'star') {
+                    // FIXED: Star Rendering Logic
+                    const spikes = e.sides || 5;
+                    const outerRadius = r;
+                    const innerRadius = r * 0.5;
+                    for(let i=0; i<spikes*2; i++) {
+                        const rad = Math.PI / spikes;
+                        const dist = (i % 2 === 0) ? outerRadius : innerRadius;
+                        const x = Math.cos(rad * i) * dist;
+                        const y = Math.sin(rad * i) * dist;
+                        if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                } 
+                else if(e.sides < 3) {
+                    ctx.arc(0,0, r, 0, Math.PI*2); 
+                } 
+                else {
+                    for(let i=0; i<=e.sides; i++) {
+                        const theta = (i / e.sides) * Math.PI * 2;
+                        const px = Math.cos(theta) * r;
+                        const py = Math.sin(theta) * r;
+                        if(i===0) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                }
+                ctx.closePath();
+                ctx.stroke();
+                
+                if(e.isBoss || e.hp < e.maxHp) {
+                    ctx.fillStyle = e.c;
+                    ctx.globalAlpha = e.isBoss ? 0.2 : 0.3;
+                    ctx.fill();
+                }
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            });
+
+            // 8. Draw Player (FIXED: Missing Evolutions)
+            if(state !== 'OVER') {
+                ctx.save();
+                ctx.translate(player.x, player.y);
+                ctx.rotate(player.angle);
+                
+                if(player.isOverdrive) {
+                    const shake = (Math.random() - 0.5) * 5;
+                    ctx.translate(shake, shake);
+                }
+
+                ctx.strokeStyle = `hsl(${player.hue}, 100%, 50%)`;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = ctx.strokeStyle;
+                ctx.lineWidth = 3;
+                
+                const pr = player.radius * gameScale;
+                ctx.beginPath();
+                
+                // FIXED: Added 'star' and 'octagon' cases so upgrades are visible
+                if(player.hullShape === 'square') ctx.rect(-pr, -pr, pr*2, pr*2);
+                else if (player.hullShape === 'triangle') { ctx.moveTo(pr, 0); ctx.lineTo(-pr/2, pr); ctx.lineTo(-pr/2, -pr); ctx.closePath(); }
+                else if (player.hullShape === 'hexagon') {
+                    for(let i=0; i<6; i++) {
+                        const th = i * Math.PI / 3;
+                        const px = Math.cos(th) * pr;
+                        const py = Math.sin(th) * pr;
+                        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+                    }
+                    ctx.closePath();
+                }
+                else if (player.hullShape === 'octagon') {
+                    for(let i=0; i<8; i++) {
+                        const th = i * Math.PI / 4;
+                        const px = Math.cos(th) * pr;
+                        const py = Math.sin(th) * pr;
+                        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+                    }
+                    ctx.closePath();
+                }
+                else if (player.hullShape === 'star') {
+                    for(let i=0; i<10; i++) {
+                        const rad = Math.PI / 5;
+                        const dist = (i % 2 === 0) ? pr : pr * 0.5;
+                        const x = Math.cos(rad * i) * dist;
+                        const y = Math.sin(rad * i) * dist;
+                        if(i===0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                }
+                else ctx.arc(0, 0, pr, 0, Math.PI*2); // Default Circle
+                
+                ctx.stroke();
+                
+                // Turret
+                ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(pr + 10, 0); ctx.stroke();
+
+                // Shield
+                if(player.hasShield) {
+                    ctx.strokeStyle = '#0ff';
+                    ctx.beginPath(); ctx.arc(0, 0, pr + 10 * gameScale, 0, Math.PI*2); ctx.stroke();
+                }
+                
+                // Repulsor
+                if(repulsorAnim > 0) {
+                    ctx.strokeStyle = `rgba(0, 255, 255, ${repulsorAnim/30})`;
+                    ctx.lineWidth = 5;
+                    ctx.beginPath(); ctx.arc(0, 0, REPULSOR_RANGE * gameScale, 0, Math.PI*2); ctx.stroke();
+                }
+
+                // Drones
+                if(player.drones > 0) {
+                    const droneDist = 50 * gameScale;
+                    for(let k=0; k<player.drones; k++) {
+                        const dAngle = (frame * 0.05) + (k * (Math.PI*2/player.drones));
+                        const dx = Math.cos(dAngle - player.angle) * droneDist; 
+                        const dy = Math.sin(dAngle - player.angle) * droneDist;
+                        ctx.fillStyle = '#f50057';
+                        ctx.beginPath(); ctx.arc(dx, dy, 5 * gameScale, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+
+                ctx.restore();
+                ctx.shadowBlur = 0;
+            }
+            
+            // 9. Floating Text
+            floatingTexts.forEach(t => {
+                ctx.fillStyle = t.c;
+                ctx.font = `bold ${14 * gameScale}px Orbitron`;
+                ctx.fillText(t.t, t.x, t.y);
+            });
+        }
+        // --- END OF INJECTION ---
 
         function fire() {
             if (player.cooldown > 0) return;
