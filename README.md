@@ -54,6 +54,7 @@ function loop() {
     // Canvas rendering
     draw();
 }
+
 ### 📱 Development Story
 **Engineered on Mobile.**
 This entire game engine—including the physics system, audio synthesis, and game balance—was developed, tested, and deployed 100% on a mobile device using AI-assisted iteration.
