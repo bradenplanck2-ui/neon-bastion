@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v16.15 (OPTIMIZED)</title>
+    <title>Neon Prime: Bastion v16.15 (ONLINE)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -486,14 +486,38 @@
         function initStars() { stars = []; const count = Math.floor((window.innerWidth * window.innerHeight) / 4000); for(let i=0; i<count; i++) { stars.push({ x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight, z: Math.random()*2+0.5 }); } }
         function updateAmmoDisplay() { const type = AMMO[player.ammo]; document.getElementById('ammo-txt').innerText = type.name; document.getElementById('ammo-txt').style.color = type.color; }
 
+        // --- UPDATED: SERVER CONNECTIVITY FOR REAL LEADERBOARD ---
         async function submitScoreToServer(playerName, score, wave) {
             try {
-                // In a real app this would fetch. Here we just pretend.
-                const response = null; // await fetch('/api/score', { ... });
-                updateLeaderboardUI([{name: 'YOU', score: score}, {name: 'ALPHA', score: 50000}]);
+                // Visual feedback for the player
+                document.getElementById('leaderboard-display').innerText = "CONNECTING TO SERVER...";
+
+                // 1. Send the data to your backend
+                // This talks to the /api/score route you created in server.js
+                const response = await fetch('/api/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name: playerName || 'GUEST', 
+                        score: score, 
+                        wave: wave 
+                    })
+                });
+
+                if (!response.ok) throw new Error("Server rejected score");
+
+                // 2. The backend sends back the updated Top 10 list immediately
+                const topScores = await response.json();
+
+                // 3. Update the UI with the real Global Ranks
+                updateLeaderboardUI(topScores);
+                
             } catch (error) {
                 console.error("Network Error:", error);
-                document.getElementById('leaderboard-display').innerText = "CONNECTION OFFLINE - SCORE SAVED LOCALLY";
+                document.getElementById('leaderboard-display').innerText = "OFFLINE - COULD NOT CONNECT";
+                
+                // Fallback: Show local score if server fails
+                updateLeaderboardUI([{name: 'YOU (OFFLINE)', score: score}]);
             }
         }
 
@@ -1068,7 +1092,7 @@
             }
             document.getElementById('over-best').innerText = highScore;
             
-            // Simulate leaderboard submit
+            // NEW: Use the real server submit
             submitScoreToServer('GUEST', Math.floor(score), wave);
         }
 
