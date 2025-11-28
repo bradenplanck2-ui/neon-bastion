@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v16.20 (SWARM FIX)</title>
+    <title>Neon Prime: Bastion v16.21 (PC UI)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -167,15 +167,26 @@
     <div id="menu-main" class="overlay">
         <div class="box">
             <h1 class="text-4xl font-bold text-cyan-400 mb-2" style="text-shadow: 0 0 15px cyan">NEON BASTION</h1>
-            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v16.14 (SILENT SLEEP)</p>
+            <p class="text-gray-400 text-sm mb-6">STATIONARY DEFENSE PROTOCOL v16.21 (CROSS-PLATFORM)</p>
             <p class="text-yellow-400 text-sm font-bold mb-6 border-b border-gray-700 pb-2">HIGH SCORE: <span id="menu-best">0</span></p>
             <button class="btn" id="btn-initialize">INITIALIZE</button>
             <button id="btn-load-game" class="btn hidden" onclick="loadGame()">LOAD SAVE STATE</button>
-            <div class="controls-info">
-                <p class="text-sm text-cyan-300 font-bold mb-2 text-left">CONTROLS</p>
-                <div><span class="text-gray-400">LEFT SCREEN</span><span class="text-gray-200"> Aim & Fire</span></div>
-                <div><span class="text-gray-400">BUTTONS</span><span class="text-gray-200"> Abilities</span></div>
+            
+            <div class="controls-info mt-4 w-full">
+                <div class="grid grid-cols-2 gap-4 text-left bg-gray-900 bg-opacity-50 p-3 rounded border border-gray-800">
+                    <div>
+                        <p class="text-cyan-400 font-bold text-xs mb-1">MOBILE</p>
+                        <div class="text-gray-400 text-[10px]">TOUCH: <span class="text-white">Aim</span></div>
+                        <div class="text-gray-400 text-[10px]">TAP: <span class="text-white">Fire</span></div>
+                    </div>
+                    <div>
+                        <p class="text-cyan-400 font-bold text-xs mb-1">DESKTOP</p>
+                        <div class="text-gray-400 text-[10px]">MOUSE: <span class="text-white">Aim/Fire</span></div>
+                        <div class="text-gray-400 text-[10px]">SPACE/F: <span class="text-white">Abilities</span></div>
+                    </div>
+                </div>
             </div>
+
         </div>
     </div>
     <div id="menu-upgrade" class="overlay hidden">
