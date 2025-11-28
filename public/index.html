@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Prime: Bastion v16.18 (TUNED)</title>
+    <title>Neon Prime: Bastion v16.20 (SWARM FIX)</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -247,16 +247,16 @@
         const REPULSOR_MAX = 240, REPULSOR_RANGE = 220; 
         let repulsorAnim = 0; 
 
-        // --- UNPACKED CONSTANTS (REBALANCED v16.9) ---
-        // NEW: Added SHAKE property to AMMO types for custom recoil feel
+        // --- UNPACKED CONSTANTS (REBALANCED v16.20 - SWARM FIX) ---
         const AMMO = {
-            standard: { name: 'PLASMA', color: '#0ff', dmg: 4.5, speed: 1.3, pierce: 1, desc: 'Balanced reliable damage.', shape: 'circle', shake: 1.0 }, // TUNED: Light kick
-            piercing: { name: 'RAILGUN', color: '#f0f', dmg: 4.0, speed: 1.6, pierce: 5, desc: 'High velocity penetration.', shape: 'bolt', shake: 2.5 },
-            explosive: { name: 'FLAK', color: '#fa0', dmg: 4.0, speed: 0.9, pierce: 0, radius: 80, desc: 'Explosive Area of Effect.', shape: 'cross', shake: 4.0 }, // Heavy kick
-            laser: { name: 'BEAM', color: '#f05', dmg: 0.1, speed: 0, pierce: 999, desc: 'Melts enemies in a line.', shape: 'none', shake: 0.1 }, // Almost no shake
-            homing: { name: 'SWARM', color: '#0f0', dmg: 3.6, speed: 0.8, pierce: 0, desc: 'Seeking Missiles.', shape: 'triangle', shake: 1.0 },
-            singularity: { name: 'VOID', color: '#84f', dmg: 0.5, speed: 0.3, pierce: 0, desc: 'Gravity Well Generator.', shape: 'ring', gravWellRadius: 60, shake: 3.0 },
-            volt: { name: 'VOLT', color: '#ffea00', dmg: 3.8, speed: 2.0, pierce: 2, desc: 'High Velocity Energy.', shape: 'bolt', shake: 1.5 }
+            standard: { name: 'PLASMA', color: '#0ff', dmg: 4.5, speed: 1.3, pierce: 1, desc: 'Balanced reliable damage.', shape: 'circle', shake: 0.3 }, 
+            piercing: { name: 'RAILGUN', color: '#f0f', dmg: 4.0, speed: 1.6, pierce: 5, desc: 'High velocity penetration.', shape: 'bolt', shake: 1.0 }, 
+            explosive: { name: 'FLAK', color: '#fa0', dmg: 4.0, speed: 0.9, pierce: 0, radius: 80, desc: 'Explosive Area of Effect.', shape: 'cross', shake: 1.5 }, 
+            laser: { name: 'BEAM', color: '#f05', dmg: 0.1, speed: 0, pierce: 999, desc: 'Melts enemies in a line.', shape: 'none', shake: 0.1 }, 
+            // TUNED: Faster speed (1.1), slightly tighter turn rate (0.4 shake)
+            homing: { name: 'SWARM', color: '#0f0', dmg: 3.6, speed: 1.1, pierce: 0, desc: 'Seeking Missiles.', shape: 'triangle', shake: 0.4 }, 
+            singularity: { name: 'VOID', color: '#84f', dmg: 0.5, speed: 0.3, pierce: 0, desc: 'Gravity Well Generator.', shape: 'ring', gravWellRadius: 60, shake: 1.5 },
+            volt: { name: 'VOLT', color: '#ffea00', dmg: 3.8, speed: 2.0, pierce: 2, desc: 'High Velocity Energy.', shape: 'bolt', shake: 0.4 } 
         };
 
         const POWERUPS = {
@@ -1443,13 +1443,16 @@
                 // VISUAL: Bullet Trails
                 if (frame % 2 === 0) { spawnTrail(b.x, b.y, b.c, 2); }
 
+                // --- UPDATE: HOMING MISSILE LOGIC (TUNED) ---
                 if (b.type === 'homing') {
                     let nearest = null, minDistSq = Infinity;
                     for(let k=0; k<enemies.length; k++){ const e = enemies[k]; const dSq = (e.x-b.x)**2 + (e.y-b.y)**2; if(!e.isProjectile && dSq < minDistSq) { minDistSq = dSq; nearest = e; } }
                     if(nearest && minDistSq < 250000) { 
                         const desiredAngle = Math.atan2(nearest.y - b.y, nearest.x - b.x); const currentAngle = Math.atan2(b.vy, b.vx);
                         let diff = desiredAngle - currentAngle; while(diff > Math.PI) diff -= Math.PI*2; while(diff < -Math.PI) diff += Math.PI*2;
-                        b.vx = Math.cos(currentAngle + Math.sign(diff)*0.05) * Math.hypot(b.vx, b.vy); b.vy = Math.sin(currentAngle + Math.sign(diff)*0.05) * Math.hypot(b.vx, b.vy);
+                        // NEW FIX: Tuned turn speed (0.04) for better tracking
+                        b.vx = Math.cos(currentAngle + Math.sign(diff)*0.04) * Math.hypot(b.vx, b.vy); 
+                        b.vy = Math.sin(currentAngle + Math.sign(diff)*0.04) * Math.hypot(b.vx, b.vy);
                     }
                 }
                 b.x += b.vx * gameScale; b.y += b.vy * gameScale;
